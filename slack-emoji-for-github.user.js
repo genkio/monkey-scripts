@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Slack Emoji for GitHub
 // @namespace    local.slack.github.emoji
-// @version      0.3.0
+// @version      0.5.0
 // @description  Cache Slack custom emojis from Slack web and autocomplete them in GitHub PR comment textareas using ::
 // @match        https://app.slack.com/*
 // @match        https://github.com/*
@@ -35,92 +35,88 @@
     await GM_setValue(STORE_KEY, JSON.stringify(store));
   }
 
-  function isSlackEmojiListUrl(url) {
-    return typeof url === 'string' &&
-      /edgeapi\.slack\.com\/cache\/[^/]+\/emojis\/list/.test(url);
+  function getWorkspaceIdFromPage() {
+    // Extract workspace ID from the Slack URL, e.g. https://app.slack.com/client/T3V2WPU0K/...
+    const m = location.pathname.match(/\/client\/([A-Z0-9]+)/);
+    return m ? m[1] : 'default';
   }
 
-  function getWorkspaceIdFromUrl(url) {
-    const m = String(url).match(/edgeapi\.slack\.com\/cache\/([^/]+)\/emojis\/list/);
-    return m ? m[1] : null;
-  }
-
-  async function mergeEmojiResults(workspaceId, payload) {
-    if (!workspaceId || !payload || !Array.isArray(payload.results)) return;
-
-    const store = await loadStore();
-    if (!store[workspaceId]) {
-      store[workspaceId] = {
-        updatedAt: nowTs(),
-        emojis: []
-      };
+  function scrapeEmojiNamesFromPicker() {
+    const names = new Set();
+    // Scrape all rendered emoji list items in the picker
+    const items = document.querySelectorAll('[data-qa="emoji_list_item"] img[data-stringify-emoji]');
+    for (const img of items) {
+      const name = img.getAttribute('data-stringify-emoji');
+      if (name) names.add(name.replace(/^:|:$/g, ''));
     }
+    // Also try data-name on the button itself
+    const buttons = document.querySelectorAll('[data-qa="emoji_list_item"][data-name]');
+    for (const btn of buttons) {
+      const name = btn.getAttribute('data-name');
+      if (name) names.add(name);
+    }
+    return names;
+  }
 
-    // Only cache the names
-    const names = payload.results
-        .map(item => item && item.name)
-        .filter(Boolean);
+  async function copyEmojisFromPicker() {
+    const names = scrapeEmojiNamesFromPicker();
+    if (!names.size) return 0;
 
-    store[workspaceId].emojis = Array.from(new Set(names));
-    store[workspaceId].updatedAt = nowTs();
+    const workspaceId = getWorkspaceIdFromPage();
+    const store = await loadStore();
+    store[workspaceId] = {
+      updatedAt: nowTs(),
+      emojis: Array.from(names)
+    };
     store._lastWorkspaceId = workspaceId;
     await saveStore(store);
 
-    console.log(`[SlackEmojiTM] cached ${store[workspaceId].emojis.length} emoji names for workspace ${workspaceId}`);
+    console.log(`[SlackEmojiTM] copied ${names.size} emoji names from picker for workspace ${workspaceId}`);
+    return names.size;
   }
 
-  function patchSlackFetch() {
-    const orig = window.fetch;
-    if (!orig || orig.__tmSlackEmojiPatched) return;
+  function injectCopyButton(footer) {
+    if (footer.querySelector('.tm-slack-emoji-copy-btn')) return;
 
-    const wrapped = async function (...args) {
-      const res = await orig.apply(this, args);
+    const btn = document.createElement('button');
+    btn.className = 'c-button c-button--outline c-button--small tm-slack-emoji-copy-btn';
+    btn.type = 'button';
+    btn.textContent = 'Copy';
+    btn.style.marginLeft = '8px';
 
-      try {
-        const input = args[0];
-        const url = typeof input === 'string' ? input : input?.url;
-        if (isSlackEmojiListUrl(url)) {
-          res.clone().json()
-            .then(json => mergeEmojiResults(getWorkspaceIdFromUrl(url), json))
-            .catch(() => {});
-        }
-      } catch {}
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const count = await copyEmojisFromPicker();
+      btn.textContent = count ? `Copied ${count}!` : 'No emojis found';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    });
 
-      return res;
-    };
-
-    wrapped.__tmSlackEmojiPatched = true;
-    window.fetch = wrapped;
+    // Insert after the Add Emoji button
+    const addBtn = footer.querySelector('[data-qa="customize_emoji_add_button"]');
+    if (addBtn) {
+      addBtn.after(btn);
+    } else {
+      // Fallback: append to the inner div
+      const inner = footer.firstElementChild || footer;
+      inner.appendChild(btn);
+    }
   }
 
-  function patchSlackXHR() {
-    if (XMLHttpRequest.prototype.__tmSlackEmojiPatched) return;
-    XMLHttpRequest.prototype.__tmSlackEmojiPatched = true;
-
-    const origOpen = XMLHttpRequest.prototype.open;
-    const origSend = XMLHttpRequest.prototype.send;
-
-    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-      this.__tmSlackEmojiUrl = url;
-      return origOpen.call(this, method, url, ...rest);
-    };
-
-    XMLHttpRequest.prototype.send = function (...args) {
-      this.addEventListener('load', () => {
-        try {
-          const url = this.__tmSlackEmojiUrl;
-          if (!isSlackEmojiListUrl(url)) return;
-          const json = JSON.parse(this.responseText);
-          mergeEmojiResults(getWorkspaceIdFromUrl(url), json).catch(() => {});
-        } catch {}
-      });
-      return origSend.apply(this, args);
-    };
+  function observeEmojiPicker() {
+    const observer = new MutationObserver(() => {
+      const footer = document.querySelector('.p-emoji_picker__footer');
+      if (footer) injectCopyButton(footer);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   function onSlack() {
-    patchSlackFetch();
-    patchSlackXHR();
+    if (document.body) {
+      observeEmojiPicker();
+    } else {
+      document.addEventListener('DOMContentLoaded', observeEmojiPicker);
+    }
   }
 
   function ensureStyles() {
