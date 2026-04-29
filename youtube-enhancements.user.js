@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.1.0
-// @description  Hide YouTube thumbnails and auto-unmute video pages.
+// @version      0.2.0
+// @description  Remove YouTube thumbnails and auto-unmute video pages.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
 // @grant        none
@@ -14,6 +14,17 @@
 
   const STYLE_ID = 'tm-youtube-enhancements-style';
   const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+
+  const THUMBNAIL_CONTAINER_SELECTOR = [
+    'ytd-thumbnail',
+    'ytd-playlist-thumbnail',
+    'ytd-video-preview',
+    'ytd-moving-thumbnail-renderer',
+    'yt-thumbnail-view-model',
+    'ytm-thumbnail',
+    '.media-item-thumbnail-container',
+    '.compact-media-item-image'
+  ].join(',');
 
   const THUMBNAIL_IMAGE_SELECTOR = [
     'ytd-thumbnail img',
@@ -27,14 +38,6 @@
     'a[href^="/shorts"] img[src*="ytimg.com/vi"]'
   ].join(',');
 
-  const BACKGROUND_THUMBNAIL_SELECTOR = [
-    'ytd-thumbnail [style*="background-image"]',
-    'ytd-playlist-thumbnail [style*="background-image"]',
-    'ytm-thumbnail [style*="background-image"]',
-    '.media-item-thumbnail-container [style*="background-image"]',
-    '.compact-media-item-image [style*="background-image"]'
-  ].join(',');
-
   let scheduled = false;
   let unmuteTimer = null;
 
@@ -44,26 +47,9 @@
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      ytd-thumbnail,
-      ytd-playlist-thumbnail,
-      ytm-thumbnail,
-      .media-item-thumbnail-container,
-      .compact-media-item-image {
-        background: #111 !important;
-      }
-
-      ${THUMBNAIL_IMAGE_SELECTOR} {
-        opacity: 0 !important;
-        visibility: hidden !important;
-      }
-
+      ${THUMBNAIL_CONTAINER_SELECTOR},
       img[data-youtube-enhancements-thumbnail-disabled="true"] {
-        opacity: 0 !important;
-        visibility: hidden !important;
-      }
-
-      ${BACKGROUND_THUMBNAIL_SELECTOR} {
-        background-image: none !important;
+        display: none !important;
       }
     `;
 
@@ -72,6 +58,18 @@
 
   function isVideoPage() {
     return location.pathname === '/watch' || location.pathname.startsWith('/shorts/');
+  }
+
+  function removeThumbnailElement(el) {
+    if (!(el instanceof HTMLElement)) return;
+    el.dataset.youtubeEnhancementsThumbnailRemoved = 'true';
+    el.setAttribute('aria-hidden', 'true');
+    el.style.setProperty('display', 'none', 'important');
+  }
+
+  function getThumbnailContainer(img) {
+    if (!(img instanceof HTMLElement)) return null;
+    return img.closest(THUMBNAIL_CONTAINER_SELECTOR) || img;
   }
 
   function disableThumbnailImage(img) {
@@ -86,17 +84,13 @@
     if (img.src !== BLANK_IMAGE) {
       img.src = BLANK_IMAGE;
     }
-  }
 
-  function disableBackgroundThumbnail(el) {
-    if (!(el instanceof HTMLElement)) return;
-    if (el.style.getPropertyValue('background-image') === 'none') return;
-    el.style.setProperty('background-image', 'none', 'important');
+    removeThumbnailElement(getThumbnailContainer(img));
   }
 
   function disableThumbnails() {
+    document.querySelectorAll(THUMBNAIL_CONTAINER_SELECTOR).forEach(removeThumbnailElement);
     document.querySelectorAll(THUMBNAIL_IMAGE_SELECTOR).forEach(disableThumbnailImage);
-    document.querySelectorAll(BACKGROUND_THUMBNAIL_SELECTOR).forEach(disableBackgroundThumbnail);
   }
 
   function getActiveVideo() {
