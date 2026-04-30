@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Auto Temporary Chat
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Automatically clicks the "Turn on temporary chat" button on ChatGPT.
 // @author       You
 // @match        https://chatgpt.com/*
@@ -16,9 +16,22 @@
     // the button while the UI takes a millisecond to update its state.
     let lastClickTime = 0;
     const cooldownMs = 1000;
+    let userManuallyToggledTempChat = false;
+
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest?.('button[aria-label]');
+        const label = button?.getAttribute('aria-label') || '';
+
+        if (event.isTrusted && label.toLowerCase().includes('temporary chat')) {
+            userManuallyToggledTempChat = true;
+            console.log("Auto Temporary Chat: Manual toggle detected; auto-enable paused.");
+        }
+    }, true);
 
     // Create an observer to monitor the page for dynamic element loading
     const observer = new MutationObserver(() => {
+        if (userManuallyToggledTempChat) return;
+
         const now = Date.now();
         if (now - lastClickTime < cooldownMs) return;
 
