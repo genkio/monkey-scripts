@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.3.0
+// @version      0.6.0
 // @description  Remove YouTube thumbnails, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
