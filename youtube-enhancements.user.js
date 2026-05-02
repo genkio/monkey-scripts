@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.7.5
+// @version      0.7.6
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -70,11 +70,17 @@
   // Stable semantic signals YouTube has to keep for accessibility/routing,
   // regardless of how often they rename the wrapper element.
   const SHORTS_TAB_ANCHOR_SELECTOR = '[aria-label="Shorts" i],[tab-identifier="FEshorts"]';
+  // Walk up to one of these when hiding the Shorts tab — keep all variants:
+  // the v0.7.5 attempt at consolidation regressed clicks on iOS Safari, where
+  // a narrower pattern is the one actually reaching the tappable slot.
   const SHORTS_TAB_SLOT_SELECTOR = [
     'ytm-pivot-bar-item-renderer',
     'ytd-guide-entry-renderer',
     'ytd-mini-guide-entry-renderer',
     '[role="tab"]',
+    '[class*="pivot-bar-item"]',
+    '[class*="pivot-shorts"]',
+    '[class*="bottom-bar-item"]',
     '[class*="pivot"]',
     '[class*="bottom-nav"]'
   ].join(',');
