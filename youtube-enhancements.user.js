@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.7.0
+// @version      0.7.1
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -65,7 +65,11 @@
     // Mobile (m.youtube.com)
     'ytm-reel-shelf-renderer',
     'ytm-shorts-lockup-view-model',
-    'ytm-pivot-bar-item-renderer:has(a[href="/shorts"])'
+    // Bottom pivot-bar Shorts tab — multiple selectors so we still hit it if YouTube swaps href/aria
+    'ytm-pivot-bar-item-renderer[tab-identifier="FEshorts"]',
+    'ytm-pivot-bar-item-renderer:has(a[href^="/shorts"])',
+    'ytm-pivot-bar-item-renderer:has([aria-label="Shorts" i])',
+    'ytm-pivot-bar-item-renderer:has([role="tab"][aria-label="Shorts" i])'
   ].join(',');
 
   let scheduled = false;
