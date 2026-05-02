@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.7.2
+// @version      0.7.3
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -79,7 +79,20 @@
     'ytm-pivot-bar-item-renderer',
     'ytd-guide-entry-renderer',
     'ytd-mini-guide-entry-renderer',
-    '[role="tab"]'
+    '[role="tab"]',
+    '[class*="pivot-bar-item"]',
+    '[class*="pivot-shorts"]',
+    '[class*="bottom-bar-item"]'
+  ].join(',');
+  // Renderers that wrap actual video content — never hide one of these even if
+  // a descendant happens to have the text "Shorts" (e.g. a video titled "Shorts").
+  const SHORTS_TAB_CONTENT_BLOCKLIST = [
+    'ytd-video-renderer',
+    'ytd-rich-item-renderer',
+    'ytd-grid-video-renderer',
+    'ytd-compact-video-renderer',
+    'ytm-video-with-context-renderer',
+    'ytm-compact-video-renderer'
   ].join(',');
 
   let scheduled = false;
@@ -168,13 +181,30 @@
     document.querySelectorAll(THUMBNAIL_IMAGE_SELECTOR).forEach(disableThumbnailImage);
   }
 
+  function hideShortsTabSlot(el) {
+    if (!(el instanceof HTMLElement)) return;
+    const slot = el.closest(SHORTS_TAB_SLOT_SELECTOR) || el;
+    if (slot instanceof HTMLElement) {
+      slot.dataset.youtubeEnhancementsShortsHidden = 'true';
+      slot.style.setProperty('display', 'none', 'important');
+    }
+  }
+
   function hideShortsTabs() {
-    document.querySelectorAll(SHORTS_TAB_ANCHOR_SELECTOR).forEach(el => {
+    // Pass 1: stable anchors (aria-label / tab-identifier).
+    document.querySelectorAll(SHORTS_TAB_ANCHOR_SELECTOR).forEach(hideShortsTabSlot);
+
+    // Pass 2: text-content fallback for renders (e.g. iOS Safari mobile) where
+    // the tab is a plain <a>/<button> labeled only by visible text "Shorts".
+    document.querySelectorAll('a, button').forEach(el => {
       if (!(el instanceof HTMLElement)) return;
-      const slot = el.closest(SHORTS_TAB_SLOT_SELECTOR) || el;
-      if (slot instanceof HTMLElement) {
-        slot.style.setProperty('display', 'none', 'important');
-      }
+      if (el.dataset.youtubeEnhancementsShortsHidden === 'true') return;
+      const text = (el.textContent || '').trim();
+      if (text.length === 0 || text.length > 20) return;
+      if (text.toLowerCase() !== 'shorts') return;
+      // Avoid hiding actual video items that happen to be titled "Shorts".
+      if (el.closest(SHORTS_TAB_CONTENT_BLOCKLIST)) return;
+      hideShortsTabSlot(el);
     });
   }
 
