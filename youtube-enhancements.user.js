@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.7.3
+// @version      0.7.4
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -82,7 +82,9 @@
     '[role="tab"]',
     '[class*="pivot-bar-item"]',
     '[class*="pivot-shorts"]',
-    '[class*="bottom-bar-item"]'
+    '[class*="bottom-bar-item"]',
+    '[class*="pivot"]',
+    '[class*="bottom-nav"]'
   ].join(',');
   // Renderers that wrap actual video content — never hide one of these even if
   // a descendant happens to have the text "Shorts" (e.g. a video titled "Shorts").
@@ -194,18 +196,22 @@
     // Pass 1: stable anchors (aria-label / tab-identifier).
     document.querySelectorAll(SHORTS_TAB_ANCHOR_SELECTOR).forEach(hideShortsTabSlot);
 
-    // Pass 2: text-content fallback for renders (e.g. iOS Safari mobile) where
-    // the tab is a plain <a>/<button> labeled only by visible text "Shorts".
-    document.querySelectorAll('a, button').forEach(el => {
-      if (!(el instanceof HTMLElement)) return;
-      if (el.dataset.youtubeEnhancementsShortsHidden === 'true') return;
-      const text = (el.textContent || '').trim();
-      if (text.length === 0 || text.length > 20) return;
-      if (text.toLowerCase() !== 'shorts') return;
-      // Avoid hiding actual video items that happen to be titled "Shorts".
-      if (el.closest(SHORTS_TAB_CONTENT_BLOCKLIST)) return;
-      hideShortsTabSlot(el);
+    // Pass 2: text-node sweep. Catches the iOS Safari mobile case where the
+    // pivot-bar tab is a plain element (div / span / custom element) labeled
+    // only by its visible text "Shorts" — element tag-agnostic by design.
+    if (!document.body) return;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = (node.nodeValue || '').trim().toLowerCase();
+        return text === 'shorts' ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
     });
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (!parent) continue;
+      if (parent.closest(SHORTS_TAB_CONTENT_BLOCKLIST)) continue;
+      hideShortsTabSlot(parent);
+    }
   }
 
   function getActiveVideo() {
