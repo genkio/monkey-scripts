@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.7.4
+// @version      0.7.5
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -62,14 +62,9 @@
     'ytd-video-renderer:has(a[href*="/shorts/"])',
     'ytd-grid-video-renderer:has(a[href*="/shorts/"])',
     'ytd-compact-video-renderer:has(a[href*="/shorts/"])',
-    // Mobile (m.youtube.com)
+    // Mobile (m.youtube.com) — pivot-bar Shorts tab is handled by hideShortsTabs() at runtime
     'ytm-reel-shelf-renderer',
-    'ytm-shorts-lockup-view-model',
-    // Bottom pivot-bar Shorts tab — multiple selectors so we still hit it if YouTube swaps href/aria
-    'ytm-pivot-bar-item-renderer[tab-identifier="FEshorts"]',
-    'ytm-pivot-bar-item-renderer:has(a[href^="/shorts"])',
-    'ytm-pivot-bar-item-renderer:has([aria-label="Shorts" i])',
-    'ytm-pivot-bar-item-renderer:has([role="tab"][aria-label="Shorts" i])'
+    'ytm-shorts-lockup-view-model'
   ].join(',');
 
   // Stable semantic signals YouTube has to keep for accessibility/routing,
@@ -80,9 +75,6 @@
     'ytd-guide-entry-renderer',
     'ytd-mini-guide-entry-renderer',
     '[role="tab"]',
-    '[class*="pivot-bar-item"]',
-    '[class*="pivot-shorts"]',
-    '[class*="bottom-bar-item"]',
     '[class*="pivot"]',
     '[class*="bottom-nav"]'
   ].join(',');
