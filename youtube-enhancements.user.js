@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.7.1
+// @version      0.7.2
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -70,6 +70,16 @@
     'ytm-pivot-bar-item-renderer:has(a[href^="/shorts"])',
     'ytm-pivot-bar-item-renderer:has([aria-label="Shorts" i])',
     'ytm-pivot-bar-item-renderer:has([role="tab"][aria-label="Shorts" i])'
+  ].join(',');
+
+  // Stable semantic signals YouTube has to keep for accessibility/routing,
+  // regardless of how often they rename the wrapper element.
+  const SHORTS_TAB_ANCHOR_SELECTOR = '[aria-label="Shorts" i],[tab-identifier="FEshorts"]';
+  const SHORTS_TAB_SLOT_SELECTOR = [
+    'ytm-pivot-bar-item-renderer',
+    'ytd-guide-entry-renderer',
+    'ytd-mini-guide-entry-renderer',
+    '[role="tab"]'
   ].join(',');
 
   let scheduled = false;
@@ -156,6 +166,16 @@
   function disableThumbnails() {
     document.querySelectorAll(THUMBNAIL_CONTAINER_SELECTOR).forEach(removeThumbnailElement);
     document.querySelectorAll(THUMBNAIL_IMAGE_SELECTOR).forEach(disableThumbnailImage);
+  }
+
+  function hideShortsTabs() {
+    document.querySelectorAll(SHORTS_TAB_ANCHOR_SELECTOR).forEach(el => {
+      if (!(el instanceof HTMLElement)) return;
+      const slot = el.closest(SHORTS_TAB_SLOT_SELECTOR) || el;
+      if (slot instanceof HTMLElement) {
+        slot.style.setProperty('display', 'none', 'important');
+      }
+    });
   }
 
   function getActiveVideo() {
@@ -266,6 +286,7 @@
   function runEnhancements() {
     ensureStyles();
     disableThumbnails();
+    hideShortsTabs();
     hookVideos();
     unmuteCurrentVideo();
   }
