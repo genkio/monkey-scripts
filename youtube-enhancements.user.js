@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.6.0
-// @description  Remove YouTube thumbnails, auto-unmute video pages, and keep iOS background playback alive.
+// @version      0.7.0
+// @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
 // @grant        none
@@ -47,6 +47,27 @@
     'a[href^="/shorts"] img[src*="ytimg.com/vi"]'
   ].join(',');
 
+  const SHORTS_HIDE_SELECTOR = [
+    // Dedicated Shorts shelves and the sections wrapping them
+    'ytd-reel-shelf-renderer',
+    'ytd-rich-shelf-renderer[is-shorts]',
+    'ytd-rich-section-renderer:has(ytd-reel-shelf-renderer)',
+    'ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts])',
+    'ytd-reel-item-renderer',
+    // Sidebar / mini-sidebar nav entries
+    'ytd-guide-entry-renderer:has(a[title="Shorts"])',
+    'ytd-mini-guide-entry-renderer[aria-label="Shorts"]',
+    // Feed items (home grid, search, channel grid, watch-page sidebar) that point to a Short
+    'ytd-rich-item-renderer:has(a[href*="/shorts/"])',
+    'ytd-video-renderer:has(a[href*="/shorts/"])',
+    'ytd-grid-video-renderer:has(a[href*="/shorts/"])',
+    'ytd-compact-video-renderer:has(a[href*="/shorts/"])',
+    // Mobile (m.youtube.com)
+    'ytm-reel-shelf-renderer',
+    'ytm-shorts-lockup-view-model',
+    'ytm-pivot-bar-item-renderer:has(a[href="/shorts"])'
+  ].join(',');
+
   let scheduled = false;
   let unmuteTimer = null;
   let backgroundResumeUntil = 0;
@@ -62,6 +83,10 @@
       img[data-youtube-enhancements-thumbnail-disabled="true"] {
         display: none !important;
       }
+
+      ${SHORTS_HIDE_SELECTOR} {
+        display: none !important;
+      }
     `;
 
     (document.head || document.documentElement).appendChild(style);
@@ -69,6 +94,23 @@
 
   function isVideoPage() {
     return location.pathname === '/watch' || location.pathname.startsWith('/shorts/');
+  }
+
+  function redirectShortsToWatch() {
+    const { pathname, search, hash } = location;
+
+    if (pathname === '/shorts' || pathname === '/shorts/') {
+      location.replace('/' + hash);
+      return true;
+    }
+
+    const match = pathname.match(/^\/shorts\/([^/?#]+)/);
+    if (!match) return false;
+
+    const params = new URLSearchParams(search);
+    params.set('v', match[1]);
+    location.replace(`/watch?${params.toString()}${hash}`);
+    return true;
   }
 
   function shouldKeepBackgroundPlaybackAlive() {
@@ -235,6 +277,7 @@
   }
 
   function handleNavigation() {
+    if (redirectShortsToWatch()) return;
     scheduleEnhancements();
     startUnmuteWindow();
   }
