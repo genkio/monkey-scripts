@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.7.6
+// @version      0.7.7
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and keep iOS background playback alive.
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -62,9 +62,16 @@
     'ytd-video-renderer:has(a[href*="/shorts/"])',
     'ytd-grid-video-renderer:has(a[href*="/shorts/"])',
     'ytd-compact-video-renderer:has(a[href*="/shorts/"])',
-    // Mobile (m.youtube.com) — pivot-bar Shorts tab is handled by hideShortsTabs() at runtime
+    // Mobile (m.youtube.com)
     'ytm-reel-shelf-renderer',
-    'ytm-shorts-lockup-view-model'
+    'ytm-shorts-lockup-view-model',
+    // Bottom pivot-bar Shorts tab — these *do* fire in the iOS Safari render
+    // (verified: removing them in v0.7.5 left the tab tappable). Don't remove
+    // them again without confirming via DevTools that they match nothing.
+    'ytm-pivot-bar-item-renderer[tab-identifier="FEshorts"]',
+    'ytm-pivot-bar-item-renderer:has(a[href^="/shorts"])',
+    'ytm-pivot-bar-item-renderer:has([aria-label="Shorts" i])',
+    'ytm-pivot-bar-item-renderer:has([role="tab"][aria-label="Shorts" i])'
   ].join(',');
 
   // Stable semantic signals YouTube has to keep for accessibility/routing,
@@ -138,6 +145,34 @@
     params.set('v', match[1]);
     location.replace(`/watch?${params.toString()}${hash}`);
     return true;
+  }
+
+  function findShortsClickTarget(eventTarget) {
+    if (!(eventTarget instanceof Element)) return null;
+    // Anything pointing at /shorts via href — most reliable signal.
+    const link = eventTarget.closest('a[href^="/shorts"], a[href*="youtube.com/shorts"]');
+    if (link) return link;
+    // Tab-shaped ancestor whose visible label is exactly "Shorts" — covers the
+    // iOS Safari pivot-bar case where the tap target is a non-anchor element.
+    const tab = eventTarget.closest('[role="tab"], [role="link"], [role="button"], button, ytm-pivot-bar-item-renderer');
+    if (!tab) return null;
+    const text = (tab.textContent || '').trim().toLowerCase();
+    return text === 'shorts' ? tab : null;
+  }
+
+  function blockShortsClicks(event) {
+    const target = findShortsClickTarget(event.target);
+    if (!target) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    const href = target.getAttribute('href') || '';
+    const idMatch = href.match(/\/shorts\/([^/?#]+)/);
+    if (idMatch) {
+      location.assign(`/watch?v=${encodeURIComponent(idMatch[1])}`);
+    } else if (location.pathname !== '/') {
+      location.assign('/');
+    }
   }
 
   function shouldKeepBackgroundPlaybackAlive() {
@@ -443,6 +478,10 @@
   window.addEventListener('yt-navigate-finish', handleNavigation);
   window.addEventListener('popstate', handleNavigation);
   window.addEventListener('hashchange', handleNavigation);
+
+  // Capture-phase click guard: even if every hide pass missed the Shorts tab,
+  // intercept the click before YouTube's bubble-phase handlers see it.
+  document.addEventListener('click', blockShortsClicks, true);
 
   installBackgroundPlaybackGuards();
   ensureStyles();
