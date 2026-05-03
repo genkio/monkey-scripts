@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Hacker News Reader Mode
 // @namespace    local.hackernews.reader
-// @version      0.3.0
+// @version      0.4.0
 // @description  Reformat Hacker News item pages into a clean article so iOS Safari Reader Mode can render the discussion as audio-friendly prose.
 // @match        https://news.ycombinator.com/item*
 // @grant        none
@@ -36,8 +36,8 @@
     .filter(Boolean)
     .join(' · ');
 
-  const sections = [];
-  let topIndex = 0;
+  const topLevelSections = [];
+  const allSections = [];
 
   for (const row of document.querySelectorAll('tr.athing.comtr')) {
     const commentText = row.querySelector('.commtext');
@@ -48,17 +48,26 @@
     const depth = parseInt(indCell?.getAttribute('indent') || '0', 10);
     const user = row.querySelector('.hnuser')?.textContent.trim() || 'unknown';
 
-    let heading;
-    if (depth === 0) {
-      topIndex += 1;
-      heading = `Comment ${topIndex} by ${user}`;
-    } else {
-      heading = `${user} replies`;
-    }
+    const heading = depth === 0 ? `${user} says` : `${user} replies`;
+    const html = `<section><h3>${escapeHtml(heading)}</h3>${commentText.innerHTML}</section>`;
 
-    sections.push(
-      `<section><h3>${escapeHtml(heading)}</h3>${commentText.innerHTML}</section>`
-    );
+    allSections.push(html);
+    if (depth === 0) topLevelSections.push(html);
+  }
+
+  const hasReplies = allSections.length > topLevelSections.length;
+  let commentsBlock;
+  if (topLevelSections.length === 0) {
+    commentsBlock = '<h2>Comments</h2>\n<p>No comments yet.</p>';
+  } else if (!hasReplies) {
+    commentsBlock = `<h2>Comments</h2>\n${topLevelSections.join('\n')}`;
+  } else {
+    commentsBlock = `
+      <h2>Top comments</h2>
+      ${topLevelSections.join('\n')}
+      <h2>Full discussion</h2>
+      ${allSections.join('\n')}
+    `;
   }
 
   const moreLink = document.querySelector('a.morelink');
@@ -73,8 +82,7 @@
     </header>
     ${storyText ? `<section>${storyText.innerHTML}</section>` : ''}
     ${leadComment ? `<section>${leadComment.innerHTML}</section>` : ''}
-    <h2>Comments</h2>
-    ${sections.length ? sections.join('\n') : '<p>No comments yet.</p>'}
+    ${commentsBlock}
     ${moreHref ? `<p><a href="${escapeHtml(moreHref)}">More comments</a></p>` : ''}
   `;
 
