@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Hacker News Reader Mode
 // @namespace    local.hackernews.reader
-// @version      0.1.0
+// @version      0.2.0
 // @description  Reformat Hacker News item pages into a clean article so iOS Safari Reader Mode can render the discussion as audio-friendly prose.
 // @match        https://news.ycombinator.com/item*
 // @grant        none
@@ -69,7 +69,7 @@
   article.innerHTML = `
     <header>
       <h1>${escapeHtml(title)}</h1>
-      ${externalUrl ? `<p>Source: <a href="${escapeHtml(externalUrl)}">${escapeHtml(externalUrl)}</a></p>` : ''}
+      ${externalUrl ? `<p>Source: <a href="${escapeHtml(externalUrl)}">linked article</a></p>` : ''}
       ${meta ? `<p>${escapeHtml(meta)}</p>` : ''}
     </header>
     ${storyText ? `<section>${storyText.innerHTML}</section>` : ''}
@@ -78,6 +78,8 @@
     ${sections.length ? sections.join('\n') : '<p>No comments yet.</p>'}
     ${moreHref ? `<p><a href="${escapeHtml(moreHref)}">More comments</a></p>` : ''}
   `;
+
+  simplifyLinks(article);
 
   document.title = title;
   document.body.innerHTML = '';
@@ -102,6 +104,19 @@
     a { color: #0366d6; }
   `;
   document.head.appendChild(style);
+
+  function simplifyLinks(root) {
+    for (const a of root.querySelectorAll('a')) {
+      const text = (a.textContent || '').trim();
+      if (!text) continue;
+      const href = a.getAttribute('href') || '';
+      const looksLikeUrl = /^(https?:\/\/|www\.)/i.test(text) || text === href;
+      if (!looksLikeUrl) continue;
+      a.textContent = /news\.ycombinator\.com\/item/i.test(href)
+        ? 'this Hacker News thread'
+        : 'this link';
+    }
+  }
 
   function escapeHtml(s) {
     return s
