@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Hacker News Reader Mode
 // @namespace    local.hackernews.reader
-// @version      0.2.0
+// @version      0.3.0
 // @description  Reformat Hacker News item pages into a clean article so iOS Safari Reader Mode can render the discussion as audio-friendly prose.
 // @match        https://news.ycombinator.com/item*
 // @grant        none
@@ -10,6 +10,12 @@
 
 (function () {
   'use strict';
+
+  // HN doesn't expose numeric comment scores in the HTML, but it fades the
+  // .commtext color as a comment is downvoted (c00 = black, c5a..cdd = grayer).
+  // The hex digits ARE the gray level. Skip any comment whose gray exceeds this
+  // threshold. 0x00 = strict (drop anything faded), 0x5a = lenient.
+  const FADE_SKIP_THRESHOLD = 0x00;
 
   const fatitem = document.querySelector('.fatitem');
   if (!fatitem) return;
@@ -30,31 +36,24 @@
     .filter(Boolean)
     .join(' · ');
 
-  const parents = [];
   const sections = [];
   let topIndex = 0;
 
   for (const row of document.querySelectorAll('tr.athing.comtr')) {
+    const commentText = row.querySelector('.commtext');
+    if (!commentText) continue;
+    if (fadeLevel(commentText) > FADE_SKIP_THRESHOLD) continue;
+
     const indCell = row.querySelector('td.ind');
     const depth = parseInt(indCell?.getAttribute('indent') || '0', 10);
-    const userEl = row.querySelector('.hnuser');
-    const commentText = row.querySelector('.commtext');
-
-    const user = userEl?.textContent.trim() || '[deleted]';
-    const parent = depth > 0 ? parents[depth - 1] : null;
-    parents[depth] = user;
-    parents.length = depth + 1;
-
-    if (!commentText) continue;
+    const user = row.querySelector('.hnuser')?.textContent.trim() || 'unknown';
 
     let heading;
     if (depth === 0) {
       topIndex += 1;
       heading = `Comment ${topIndex} by ${user}`;
-    } else if (parent && parent !== '[deleted]') {
-      heading = `${user} replying to ${parent}`;
     } else {
-      heading = `Reply by ${user}`;
+      heading = `${user} replies`;
     }
 
     sections.push(
@@ -104,6 +103,14 @@
     a { color: #0366d6; }
   `;
   document.head.appendChild(style);
+
+  function fadeLevel(commtext) {
+    for (const cls of commtext.classList) {
+      const match = /^c([0-9a-f]{2})$/.exec(cls);
+      if (match) return parseInt(match[1], 16);
+    }
+    return 0;
+  }
 
   function simplifyLinks(root) {
     for (const a of root.querySelectorAll('a')) {
