@@ -1,11 +1,13 @@
 // ==UserScript==
-// @name         YouTube + Bilibili Custom Speed
+// @name         YouTube + Bilibili + X Custom Speed
 // @namespace    http://tampermonkey.net/
-// @version      3.4
-// @description  Default YouTube and Bilibili playback speeds
+// @version      3.5
+// @description  Default YouTube, Bilibili, and X (Twitter) playback speeds
 // @match        *://www.youtube.com/*
 // @match        *://m.youtube.com/*
 // @match        *://www.bilibili.com/*
+// @match        *://x.com/*
+// @match        *://twitter.com/*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -15,7 +17,8 @@
 
     const SPEEDS = {
         youtube: 2.25,
-        bilibili: 2.5
+        bilibili: 2.5,
+        x: 2.25
     };
 
     let lastVideo = null;
@@ -25,6 +28,7 @@
         const host = location.hostname;
         if (host.includes('youtube.com')) return SPEEDS.youtube;
         if (host.includes('bilibili.com')) return SPEEDS.bilibili;
+        if (host === 'x.com' || host.endsWith('.x.com') || host.includes('twitter.com')) return SPEEDS.x;
         return 1;
     }
 
