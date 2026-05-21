@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube + Bilibili Custom Speed
 // @namespace    http://tampermonkey.net/
-// @version      3.4
+// @version      3.5.1
 // @description  Default YouTube and Bilibili playback speeds
 // @match        *://www.youtube.com/*
 // @match        *://m.youtube.com/*
