@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.8.6
+// @version      0.8.7
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, keep iOS background playback alive, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -417,7 +417,7 @@
         max-height: none !important;
         margin: 0 !important;
         padding: 0 !important;
-        transform: translate(-50%, -50%) rotate(90deg) !important;
+        transform: translate(-50%, -50%) rotate(-90deg) !important;
         transform-origin: center center !important;
         background: #000 !important;
         z-index: 2147483646 !important;
@@ -457,7 +457,7 @@
         padding: 0 !important;
         cursor: pointer !important;
         z-index: 2147483647 !important;
-        transform: rotate(90deg) !important;
+        transform: rotate(-90deg) !important;
         transform-origin: center !important;
         -webkit-tap-highlight-color: transparent !important;
       }
