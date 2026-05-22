@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.8.9
+// @version      0.8.10
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, keep iOS background playback alive, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -134,6 +134,7 @@
   // { video, placeholder, wrapper } — captured on enter so exit can put the
   // video back exactly where YouTube had it. Placeholder is a comment node.
   let fakeFullscreenOrigin = null;
+  let fakeFullscreenSavedScrollY = 0;
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -391,9 +392,14 @@
     // the inline `width`/`height`/`top`/`left` YouTube sets on the <video>
     // are explicitly cleared so they don't fight our flex/fill rules.
     style.textContent = `
+      /* Keep the document vertically scrollable while fake-fullscreen is
+         active so a real touch-drag on the wrapper bubbles into a document
+         scroll — that's the only thing iOS Safari accepts as a signal to
+         collapse the URL bar. Lock horizontal so the rotated overlay can't
+         introduce sideways scroll. */
       html.${FAKE_FS_DOC_CLASS},
       html.${FAKE_FS_DOC_CLASS} body {
-        overflow: hidden !important;
+        overflow-x: hidden !important;
       }
 
       #${FAKE_FS_BACKDROP_ID} {
@@ -422,6 +428,10 @@
         background: #000 !important;
         z-index: 2147483646 !important;
         overflow: hidden !important;
+        /* Allow vertical pan gestures to bubble to the document so iOS
+           Safari can collapse the URL bar from a real touch scroll. Taps
+           remain absorbed by the wrapper (no leak to YouTube UI underneath). */
+        touch-action: pan-y !important;
       }
 
       #${FAKE_FS_WRAPPER_ID} video {
@@ -510,6 +520,7 @@
     const video = getActiveVideo();
     if (!video || !video.parentNode || !document.body) return;
 
+    fakeFullscreenSavedScrollY = window.scrollY || window.pageYOffset || 0;
     ensureFakeFullscreenStyles();
     fakeFullscreenActive = true;
     document.documentElement.classList.add(FAKE_FS_DOC_CLASS);
@@ -552,6 +563,12 @@
 
     removeBackdrop();
     removeExitButton();
+
+    try {
+      window.scrollTo({ top: fakeFullscreenSavedScrollY, left: 0, behavior: 'instant' });
+    } catch {
+      window.scrollTo(0, fakeFullscreenSavedScrollY);
+    }
   }
 
   function handleFullscreenButtonClick(event) {
