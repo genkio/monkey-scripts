@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.8.7
+// @version      0.8.8
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, keep iOS background playback alive, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -134,6 +134,7 @@
   // { video, placeholder, wrapper } — captured on enter so exit can put the
   // video back exactly where YouTube had it. Placeholder is a comment node.
   let fakeFullscreenOrigin = null;
+  let fakeFullscreenSavedScrollY = 0;
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -505,11 +506,34 @@
     if (btn) btn.remove();
   }
 
+  // iOS Safari shrinks the URL bar to minimal-UI when the page is scrolled
+  // past a small threshold. We're inside the fullscreen button's user-gesture
+  // tick here, so a programmatic scroll counts and actually collapses the
+  // bar — gives the rotated overlay a taller viewport to fill.
+  function collapseAddressBar() {
+    fakeFullscreenSavedScrollY = window.scrollY || window.pageYOffset || 0;
+    if (fakeFullscreenSavedScrollY >= 80) return;
+    try {
+      window.scrollTo({ top: 80, left: 0, behavior: 'instant' });
+    } catch {
+      window.scrollTo(0, 80);
+    }
+  }
+
+  function restoreScrollPosition() {
+    try {
+      window.scrollTo({ top: fakeFullscreenSavedScrollY, left: 0, behavior: 'instant' });
+    } catch {
+      window.scrollTo(0, fakeFullscreenSavedScrollY);
+    }
+  }
+
   function enterFakeFullscreen() {
     if (fakeFullscreenActive) return;
     const video = getActiveVideo();
     if (!video || !video.parentNode || !document.body) return;
 
+    collapseAddressBar();
     ensureFakeFullscreenStyles();
     fakeFullscreenActive = true;
     document.documentElement.classList.add(FAKE_FS_DOC_CLASS);
@@ -552,6 +576,7 @@
 
     removeBackdrop();
     removeExitButton();
+    restoreScrollPosition();
   }
 
   function handleFullscreenButtonClick(event) {
