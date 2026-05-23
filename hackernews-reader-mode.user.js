@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Hacker News Reader Mode
 // @namespace    local.hackernews.reader
-// @version      0.4.0
+// @version      0.5.0
 // @description  Reformat Hacker News item pages into a clean article so iOS Safari Reader Mode can render the discussion as audio-friendly prose.
 // @match        https://news.ycombinator.com/item*
 // @grant        none
@@ -37,7 +37,6 @@
     .join(' · ');
 
   const topLevelSections = [];
-  const allSections = [];
 
   for (const row of document.querySelectorAll('tr.athing.comtr')) {
     const commentText = row.querySelector('.commtext');
@@ -46,29 +45,22 @@
 
     const indCell = row.querySelector('td.ind');
     const depth = parseInt(indCell?.getAttribute('indent') || '0', 10);
+    if (depth !== 0) continue;
+
     const user = row.querySelector('.hnuser')?.textContent.trim() || 'unknown';
+    const commentId = row.id;
+    const readMore = commentId
+      ? `<p><a href="item?id=${escapeHtml(commentId)}">read more</a></p>`
+      : '';
 
-    const heading = depth === 0 ? `${user} says` : `${user} replies`;
-    const html = `<section><h3>${escapeHtml(heading)}</h3>${commentText.innerHTML}</section>`;
-
-    allSections.push(html);
-    if (depth === 0) topLevelSections.push(html);
+    topLevelSections.push(
+      `<section><h3>${escapeHtml(user + ' says')}</h3>${commentText.innerHTML}${readMore}</section>`
+    );
   }
 
-  const hasReplies = allSections.length > topLevelSections.length;
-  let commentsBlock;
-  if (topLevelSections.length === 0) {
-    commentsBlock = '<h2>Comments</h2>\n<p>No comments yet.</p>';
-  } else if (!hasReplies) {
-    commentsBlock = `<h2>Comments</h2>\n${topLevelSections.join('\n')}`;
-  } else {
-    commentsBlock = `
-      <h2>Top comments</h2>
-      ${topLevelSections.join('\n')}
-      <h2>Full discussion</h2>
-      ${allSections.join('\n')}
-    `;
-  }
+  const commentsBlock = topLevelSections.length === 0
+    ? '<h2>Comments</h2>\n<p>No comments yet.</p>'
+    : `<h2>Comments</h2>\n${topLevelSections.join('\n')}`;
 
   const moreLink = document.querySelector('a.morelink');
   const moreHref = moreLink?.getAttribute('href');
@@ -77,7 +69,7 @@
   article.innerHTML = `
     <header>
       <h1>${escapeHtml(title)}</h1>
-      ${externalUrl ? `<p>Source: <a href="${escapeHtml(externalUrl)}">linked article</a></p>` : ''}
+      ${externalUrl ? `<p><a href="${escapeHtml(externalUrl)}" target="_blank" rel="noopener">origin</a></p>` : ''}
       ${meta ? `<p>${escapeHtml(meta)}</p>` : ''}
     </header>
     ${storyText ? `<section>${storyText.innerHTML}</section>` : ''}
