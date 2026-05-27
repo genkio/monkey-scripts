@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         X Video Downloader
 // @namespace    local.x.video-downloader
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds a download button to videos in X/Twitter posts. Picks the highest-bitrate MP4 variant exposed by X's GraphQL responses.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
@@ -471,8 +471,7 @@
     button.innerHTML = [
       '<svg class="tm-xvdl-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">',
       '<path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>',
-      '</svg>',
-      '<span>Save</span>'
+      '</svg>'
     ].join('');
     button.addEventListener('click', onDownloadClick, true);
     return button;
@@ -691,16 +690,16 @@
         cursor: pointer;
         display: inline-flex;
         font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        gap: 5px;
         height: 28px;
         justify-content: center;
-        padding: 0 10px;
+        padding: 0;
         position: absolute;
         right: 10px;
         top: 10px;
         transition: background-color 120ms ease, border-color 120ms ease, opacity 120ms ease, transform 120ms ease;
         user-select: none;
         white-space: nowrap;
+        width: 28px;
         z-index: 2147483647;
       }
       .${BUTTON_CLASS} svg {
@@ -714,7 +713,6 @@
         stroke-width: 3;
         width: 15px;
       }
-      .${BUTTON_CLASS} span { pointer-events: none; }
       .${BUTTON_CLASS}:hover {
         background: rgba(29, 155, 240, 0.9);
         border-color: rgba(255, 255, 255, 0.45);
