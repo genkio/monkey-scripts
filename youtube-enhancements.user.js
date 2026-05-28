@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.8.11
+// @version      0.8.12
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, keep iOS background playback alive, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -115,7 +115,6 @@
   const FAKE_FS_DOC_CLASS = 'tm-youtube-fake-fullscreen-active';
   const FAKE_FS_BACKDROP_ID = 'tm-youtube-fake-fullscreen-backdrop';
   const FAKE_FS_EXIT_BTN_ID = 'tm-youtube-fake-fullscreen-exit';
-  const FAKE_FS_FLIP_BTN_ID = 'tm-youtube-fake-fullscreen-flip';
 
   const FULLSCREEN_BUTTON_SELECTOR = [
     '.fullscreen-icon',
@@ -136,9 +135,6 @@
   // video back exactly where YouTube had it. Placeholder is a comment node.
   let fakeFullscreenOrigin = null;
   let fakeFullscreenSavedScrollY = 0;
-  // Either -90 or 90. Persists across enter/exit so the user's flip choice
-  // sticks for the rest of the page session.
-  let fakeFullscreenRotationDeg = -90;
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -456,9 +452,10 @@
         background: #000 !important;
       }
 
-      #${FAKE_FS_EXIT_BTN_ID},
-      #${FAKE_FS_FLIP_BTN_ID} {
+      #${FAKE_FS_EXIT_BTN_ID} {
         position: fixed !important;
+        top: 16px !important;
+        right: 16px !important;
         width: 44px !important;
         height: 44px !important;
         border-radius: 50% !important;
@@ -470,20 +467,9 @@
         padding: 0 !important;
         cursor: pointer !important;
         z-index: 2147483647 !important;
+        transform: rotate(-90deg) !important;
         transform-origin: center !important;
         -webkit-tap-highlight-color: transparent !important;
-        /* JS sets `transform: rotate(...)` inline to match the wrapper's
-           current rotation (which the flip button can toggle at runtime). */
-      }
-
-      #${FAKE_FS_EXIT_BTN_ID} {
-        top: 16px !important;
-        right: 16px !important;
-      }
-
-      #${FAKE_FS_FLIP_BTN_ID} {
-        bottom: 16px !important;
-        left: 16px !important;
       }
     `;
 
@@ -529,52 +515,6 @@
     if (btn) btn.remove();
   }
 
-  function ensureFlipButton() {
-    let btn = document.getElementById(FAKE_FS_FLIP_BTN_ID);
-    if (btn) return btn;
-
-    btn = document.createElement('button');
-    btn.id = FAKE_FS_FLIP_BTN_ID;
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Flip fake fullscreen rotation');
-    btn.textContent = '⟳';
-    btn.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      flipFakeFullscreen();
-    }, true);
-
-    (document.body || document.documentElement).appendChild(btn);
-    return btn;
-  }
-
-  function removeFlipButton() {
-    const btn = document.getElementById(FAKE_FS_FLIP_BTN_ID);
-    if (btn) btn.remove();
-  }
-
-  function applyFakeFullscreenRotation() {
-    const deg = fakeFullscreenRotationDeg;
-    const wrapper = document.getElementById(FAKE_FS_WRAPPER_ID);
-    if (wrapper) {
-      wrapper.style.setProperty(
-        'transform',
-        `translate(-50%, -50%) rotate(${deg}deg)`,
-        'important'
-      );
-    }
-    for (const id of [FAKE_FS_EXIT_BTN_ID, FAKE_FS_FLIP_BTN_ID]) {
-      const btn = document.getElementById(id);
-      if (btn) btn.style.setProperty('transform', `rotate(${deg}deg)`, 'important');
-    }
-  }
-
-  function flipFakeFullscreen() {
-    if (!fakeFullscreenActive) return;
-    fakeFullscreenRotationDeg = fakeFullscreenRotationDeg === -90 ? 90 : -90;
-    applyFakeFullscreenRotation();
-  }
-
   function enterFakeFullscreen() {
     if (fakeFullscreenActive) return;
     const video = getActiveVideo();
@@ -602,8 +542,6 @@
     if (wasPlaying && video.paused) playVideo(video);
 
     ensureExitButton();
-    ensureFlipButton();
-    applyFakeFullscreenRotation();
   }
 
   function exitFakeFullscreen() {
@@ -625,7 +563,6 @@
 
     removeBackdrop();
     removeExitButton();
-    removeFlipButton();
 
     try {
       window.scrollTo({ top: fakeFullscreenSavedScrollY, left: 0, behavior: 'instant' });
