@@ -6,6 +6,7 @@
 // @match        *://www.youtube.com/*
 // @match        *://m.youtube.com/*
 // @match        *://www.bilibili.com/*
+// @match        *://m.bilibili.com/*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
