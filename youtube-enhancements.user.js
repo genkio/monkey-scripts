@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.8.12
+// @version      0.8.13
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, keep iOS background playback alive, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -135,6 +135,7 @@
   // video back exactly where YouTube had it. Placeholder is a comment node.
   let fakeFullscreenOrigin = null;
   let fakeFullscreenSavedScrollY = 0;
+  let fakeFullscreenProgressVideo = null;
 
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -471,6 +472,21 @@
         transform-origin: center !important;
         -webkit-tap-highlight-color: transparent !important;
       }
+
+      /* Border can't render a partial arc, so the ring is a masked conic-gradient. */
+      #${FAKE_FS_EXIT_BTN_ID}::after {
+        content: '' !important;
+        position: absolute !important;
+        inset: -2px !important;
+        border-radius: 50% !important;
+        background: conic-gradient(
+          #f00 calc(var(--tm-fs-progress, 0) * 360deg),
+          rgba(255, 255, 255, 0.3) 0deg
+        ) !important;
+        -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)) !important;
+        mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)) !important;
+        pointer-events: none !important;
+      }
     `;
 
     (document.head || document.documentElement).appendChild(style);
@@ -515,6 +531,33 @@
     if (btn) btn.remove();
   }
 
+  function updateExitButtonProgress() {
+    const btn = document.getElementById(FAKE_FS_EXIT_BTN_ID);
+    if (!btn || !fakeFullscreenProgressVideo) return;
+    const { currentTime, duration } = fakeFullscreenProgressVideo;
+    // Live streams report Infinity duration; keep the ring empty.
+    const ratio = Number.isFinite(duration) && duration > 0
+      ? Math.min(1, Math.max(0, currentTime / duration))
+      : 0;
+    btn.style.setProperty('--tm-fs-progress', ratio);
+  }
+
+  function startExitButtonProgress(video) {
+    stopExitButtonProgress();
+    if (!video) return;
+    fakeFullscreenProgressVideo = video;
+    video.addEventListener('timeupdate', updateExitButtonProgress);
+    video.addEventListener('durationchange', updateExitButtonProgress);
+    updateExitButtonProgress();
+  }
+
+  function stopExitButtonProgress() {
+    if (!fakeFullscreenProgressVideo) return;
+    fakeFullscreenProgressVideo.removeEventListener('timeupdate', updateExitButtonProgress);
+    fakeFullscreenProgressVideo.removeEventListener('durationchange', updateExitButtonProgress);
+    fakeFullscreenProgressVideo = null;
+  }
+
   function enterFakeFullscreen() {
     if (fakeFullscreenActive) return;
     const video = getActiveVideo();
@@ -542,6 +585,7 @@
     if (wasPlaying && video.paused) playVideo(video);
 
     ensureExitButton();
+    startExitButtonProgress(video);
   }
 
   function exitFakeFullscreen() {
@@ -563,6 +607,7 @@
 
     removeBackdrop();
     removeExitButton();
+    stopExitButtonProgress();
 
     try {
       window.scrollTo({ top: fakeFullscreenSavedScrollY, left: 0, behavior: 'instant' });

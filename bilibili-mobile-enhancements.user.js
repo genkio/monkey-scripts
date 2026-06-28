@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Mobile Enhancements
 // @namespace    local.bilibili.mobile-enhancements
-// @version      0.2.1
+// @version      0.2.2
 // @description  Mobile-focused Bilibili layout tweaks.
 // @match        https://m.bilibili.com/*
 // @match        https://t.bilibili.com/*
@@ -47,6 +47,7 @@
   let fakeFullscreenActive = false;
   let fakeFullscreenOrigin = null;
   let fakeFullscreenSavedScrollY = 0;
+  let fakeFullscreenProgressVideo = null;
   let fakeFullscreenArmedUntil = 0;
   let fakeFullscreenAttemptTimer = null;
 
@@ -217,6 +218,21 @@
         transform-origin: center !important;
         -webkit-tap-highlight-color: transparent !important;
       }
+
+      /* Border can't render a partial arc, so the ring is a masked conic-gradient. */
+      #${FAKE_FS_EXIT_BTN_ID}::after {
+        content: '' !important;
+        position: absolute !important;
+        inset: -2px !important;
+        border-radius: 50% !important;
+        background: conic-gradient(
+          #fb7299 calc(var(--bme-fs-progress, 0) * 360deg),
+          rgba(255, 255, 255, 0.3) 0deg
+        ) !important;
+        -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)) !important;
+        mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)) !important;
+        pointer-events: none !important;
+      }
     `;
 
     (document.head || document.documentElement).appendChild(style);
@@ -314,6 +330,33 @@
     if (btn) btn.remove();
   }
 
+  function updateExitButtonProgress() {
+    const btn = document.getElementById(FAKE_FS_EXIT_BTN_ID);
+    if (!btn || !fakeFullscreenProgressVideo) return;
+    const { currentTime, duration } = fakeFullscreenProgressVideo;
+    // Live streams report Infinity duration; keep the ring empty.
+    const ratio = Number.isFinite(duration) && duration > 0
+      ? Math.min(1, Math.max(0, currentTime / duration))
+      : 0;
+    btn.style.setProperty('--bme-fs-progress', ratio);
+  }
+
+  function startExitButtonProgress(video) {
+    stopExitButtonProgress();
+    if (!video) return;
+    fakeFullscreenProgressVideo = video;
+    video.addEventListener('timeupdate', updateExitButtonProgress);
+    video.addEventListener('durationchange', updateExitButtonProgress);
+    updateExitButtonProgress();
+  }
+
+  function stopExitButtonProgress() {
+    if (!fakeFullscreenProgressVideo) return;
+    fakeFullscreenProgressVideo.removeEventListener('timeupdate', updateExitButtonProgress);
+    fakeFullscreenProgressVideo.removeEventListener('durationchange', updateExitButtonProgress);
+    fakeFullscreenProgressVideo = null;
+  }
+
   function enterFakeFullscreen(video = getActiveVideo()) {
     if (fakeFullscreenActive) return;
 
@@ -338,6 +381,7 @@
     if (wasPlaying && video.paused) playVideo(video);
 
     ensureExitButton();
+    startExitButtonProgress(video);
   }
 
   function exitFakeFullscreen() {
@@ -360,6 +404,7 @@
 
     removeBackdrop();
     removeExitButton();
+    stopExitButtonProgress();
 
     try {
       window.scrollTo({ top: fakeFullscreenSavedScrollY, left: 0, behavior: 'instant' });
