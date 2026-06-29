@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Mobile Enhancements
 // @namespace    local.bilibili.mobile-enhancements
-// @version      0.2.2
+// @version      0.2.6
 // @description  Mobile-focused Bilibili layout tweaks.
 // @match        https://m.bilibili.com/*
 // @match        https://t.bilibili.com/*
@@ -20,6 +20,7 @@
   const FAKE_FS_BACKDROP_ID = 'bme-fake-fullscreen-backdrop';
   const FAKE_FS_WRAPPER_ID = 'bme-fake-fullscreen-wrapper';
   const FAKE_FS_EXIT_BTN_ID = 'bme-fake-fullscreen-exit';
+  const RELATED_CARD_SELECTOR = '.m-video-related .v-card-toapp';
   const CENTER_PLAY_SELECTOR = [
     '.bpx-player-video-btn-start',
     '.bpx-player-video-btn',
@@ -50,9 +51,14 @@
   let fakeFullscreenProgressVideo = null;
   let fakeFullscreenArmedUntil = 0;
   let fakeFullscreenAttemptTimer = null;
+  let relatedCardTouch = null;
 
   function isTimelinePage() {
     return location.hostname === 't.bilibili.com';
+  }
+
+  function isMobileVideoPage() {
+    return location.hostname === 'm.bilibili.com' && location.pathname.startsWith('/video/');
   }
 
   function ensureStyles() {
@@ -269,6 +275,83 @@
         node = node.parentElement;
       }
     });
+  }
+
+  function getRelatedItems() {
+    const state = window.__INITIAL_STATE__;
+    const related = state && state.video && state.video.related && state.video.related.result;
+    return Array.isArray(related) ? related : [];
+  }
+
+  function getRelatedCardUrl(card) {
+    const cards = Array.from(document.querySelectorAll(RELATED_CARD_SELECTOR));
+    const index = cards.indexOf(card);
+    if (index < 0) return null;
+
+    const item = getRelatedItems()[index];
+    return item && item.bvid ? `https://m.bilibili.com/video/${item.bvid}` : null;
+  }
+
+  function stopRelatedCardEvent(event) {
+    if (event.cancelable) event.preventDefault();
+    event.stopImmediatePropagation();
+    event.stopPropagation();
+  }
+
+  function navigateRelatedCard(event, card) {
+    const url = getRelatedCardUrl(card);
+    if (!url) return false;
+
+    stopRelatedCardEvent(event);
+    location.assign(url);
+    return true;
+  }
+
+  function handleRelatedCardClick(event) {
+    if (!isMobileVideoPage() || !(event.target instanceof Element)) return;
+
+    const card = event.target.closest(RELATED_CARD_SELECTOR);
+    if (!card) return;
+
+    if (!navigateRelatedCard(event, card)) stopRelatedCardEvent(event);
+  }
+
+  function rememberRelatedCardTouch(event) {
+    if (!isMobileVideoPage() || !(event.target instanceof Element)) return;
+
+    const card = event.target.closest(RELATED_CARD_SELECTOR);
+    if (!card) {
+      relatedCardTouch = null;
+      return;
+    }
+
+    const point = getEventPoint(event);
+    relatedCardTouch = point ? { card, x: point.clientX, y: point.clientY } : null;
+  }
+
+  function clearRelatedCardTouchOnMove(event) {
+    if (!relatedCardTouch) return;
+
+    const point = getEventPoint(event);
+    if (!point) {
+      relatedCardTouch = null;
+      return;
+    }
+
+    const dx = point.clientX - relatedCardTouch.x;
+    const dy = point.clientY - relatedCardTouch.y;
+    if ((dx * dx) + (dy * dy) > 144) relatedCardTouch = null;
+  }
+
+  function handleRelatedCardTouchEnd(event) {
+    if (!relatedCardTouch || !(event.target instanceof Element)) return;
+
+    const card = relatedCardTouch.card;
+    relatedCardTouch = null;
+
+    const endCard = event.target.closest(RELATED_CARD_SELECTOR);
+    if (!endCard || endCard !== card) return;
+    if (!navigateRelatedCard(event, card)) stopRelatedCardEvent(event);
   }
 
   function getActiveVideo() {
@@ -528,6 +611,10 @@
   window.addEventListener('DOMContentLoaded', syncPageState, { once: true });
   window.addEventListener('popstate', syncPageState);
   window.addEventListener('hashchange', syncPageState);
+  document.addEventListener('click', handleRelatedCardClick, true);
+  document.addEventListener('touchstart', rememberRelatedCardTouch, true);
+  document.addEventListener('touchmove', clearRelatedCardTouchOnMove, true);
+  document.addEventListener('touchend', handleRelatedCardTouchEnd, { capture: true, passive: false });
 
   const observer = new MutationObserver(() => {
     if (isTimelinePage()) scheduleCardOnlyItems();
