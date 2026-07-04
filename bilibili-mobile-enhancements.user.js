@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Mobile Enhancements
 // @namespace    local.bilibili.mobile-enhancements
-// @version      0.2.7
+// @version      0.2.8
 // @description  Mobile-focused Bilibili layout tweaks.
 // @match        https://m.bilibili.com/*
 // @match        https://t.bilibili.com/*
@@ -23,6 +23,7 @@
   const FAKE_FS_SPEED_INC_BTN_ID = 'bme-fake-fullscreen-speed-inc';
   const FAKE_FS_SPEED_DEC_BTN_ID = 'bme-fake-fullscreen-speed-dec';
   const FAKE_FS_SPEED_BTN_CLASS = 'bme-fake-fullscreen-speed';
+  const FAKE_FS_SPEED_LABEL_ID = 'bme-fake-fullscreen-speed-label';
   const FAKE_FS_SPEED_STEP = 0.5;
   const FAKE_FS_SPEED_MIN = 0.25;
   const FAKE_FS_SPEED_MAX = 5;
@@ -251,12 +252,12 @@
         left: 16px !important;
         width: 40px !important;
         height: 40px !important;
-        border-radius: 50% !important;
         border: 0 !important;
-        background: rgba(0, 0, 0, 0.65) !important;
-        color: #fff !important;
-        font: 26px/40px -apple-system, system-ui, sans-serif !important;
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+        font: 30px/40px -apple-system, system-ui, sans-serif !important;
         text-align: center !important;
+        text-shadow: 0 0 4px rgba(0, 0, 0, 0.8) !important;
         padding: 0 !important;
         cursor: pointer !important;
         z-index: 2147483647 !important;
@@ -273,6 +274,23 @@
 
       #${FAKE_FS_SPEED_INC_BTN_ID} {
         top: 16px !important;
+      }
+
+      /* Physical bottom-left renders at the user's upper-left, opposite the pair. */
+      #${FAKE_FS_SPEED_LABEL_ID} {
+        position: fixed !important;
+        bottom: 16px !important;
+        left: 16px !important;
+        min-width: 56px !important;
+        height: 40px !important;
+        color: rgba(255, 255, 255, 0.9) !important;
+        font: 600 20px/40px -apple-system, system-ui, sans-serif !important;
+        text-align: center !important;
+        text-shadow: 0 0 4px rgba(0, 0, 0, 0.8) !important;
+        z-index: 2147483647 !important;
+        transform: rotate(-90deg) !important;
+        transform-origin: center !important;
+        pointer-events: none !important;
       }
     `;
 
@@ -496,6 +514,31 @@
     });
   }
 
+  function formatSpeedLabel(rate) {
+    return `${Number(rate.toFixed(2))}×`;
+  }
+
+  function ensureSpeedLabel() {
+    let label = document.getElementById(FAKE_FS_SPEED_LABEL_ID);
+    if (label) return label;
+
+    label = document.createElement('div');
+    label.id = FAKE_FS_SPEED_LABEL_ID;
+    (document.body || document.documentElement).appendChild(label);
+    return label;
+  }
+
+  function removeSpeedLabel() {
+    const label = document.getElementById(FAKE_FS_SPEED_LABEL_ID);
+    if (label) label.remove();
+  }
+
+  function updateSpeedLabel() {
+    const label = document.getElementById(FAKE_FS_SPEED_LABEL_ID);
+    if (!label || !fakeFullscreenProgressVideo) return;
+    label.textContent = formatSpeedLabel(fakeFullscreenProgressVideo.playbackRate);
+  }
+
   function updateExitButtonProgress() {
     const btn = document.getElementById(FAKE_FS_EXIT_BTN_ID);
     if (!btn || !fakeFullscreenProgressVideo) return;
@@ -513,13 +556,16 @@
     fakeFullscreenProgressVideo = video;
     video.addEventListener('timeupdate', updateExitButtonProgress);
     video.addEventListener('durationchange', updateExitButtonProgress);
+    video.addEventListener('ratechange', updateSpeedLabel);
     updateExitButtonProgress();
+    updateSpeedLabel();
   }
 
   function stopExitButtonProgress() {
     if (!fakeFullscreenProgressVideo) return;
     fakeFullscreenProgressVideo.removeEventListener('timeupdate', updateExitButtonProgress);
     fakeFullscreenProgressVideo.removeEventListener('durationchange', updateExitButtonProgress);
+    fakeFullscreenProgressVideo.removeEventListener('ratechange', updateSpeedLabel);
     fakeFullscreenProgressVideo = null;
   }
 
@@ -548,6 +594,7 @@
 
     ensureExitButton();
     ensureSpeedButtons();
+    ensureSpeedLabel();
     startExitButtonProgress(video);
   }
 
@@ -572,6 +619,7 @@
     removeBackdrop();
     removeExitButton();
     removeSpeedButtons();
+    removeSpeedLabel();
     stopExitButtonProgress();
 
     try {

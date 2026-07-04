@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.9.1
+// @version      0.9.2
 // @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and rotate-to-landscape fake fullscreen on iOS (manual trigger, with playback-speed controls).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
@@ -111,6 +111,7 @@
   const FAKE_FS_SPEED_INC_BTN_ID = 'tm-youtube-fake-fullscreen-speed-inc';
   const FAKE_FS_SPEED_DEC_BTN_ID = 'tm-youtube-fake-fullscreen-speed-dec';
   const FAKE_FS_SPEED_BTN_CLASS = 'tm-youtube-fake-fullscreen-speed';
+  const FAKE_FS_SPEED_LABEL_ID = 'tm-youtube-fake-fullscreen-speed-label';
   const FAKE_FS_SPEED_STEP = 0.5;
   const FAKE_FS_SPEED_MIN = 0.25;
   const FAKE_FS_SPEED_MAX = 5;
@@ -446,12 +447,12 @@
         left: 16px !important;
         width: 40px !important;
         height: 40px !important;
-        border-radius: 50% !important;
         border: 0 !important;
-        background: rgba(0, 0, 0, 0.65) !important;
-        color: #fff !important;
-        font: 26px/40px -apple-system, system-ui, sans-serif !important;
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.85) !important;
+        font: 30px/40px -apple-system, system-ui, sans-serif !important;
         text-align: center !important;
+        text-shadow: 0 0 4px rgba(0, 0, 0, 0.8) !important;
         padding: 0 !important;
         cursor: pointer !important;
         z-index: 2147483647 !important;
@@ -468,6 +469,23 @@
 
       #${FAKE_FS_SPEED_INC_BTN_ID} {
         top: 16px !important;
+      }
+
+      /* Physical bottom-left renders at the user's upper-left, opposite the pair. */
+      #${FAKE_FS_SPEED_LABEL_ID} {
+        position: fixed !important;
+        bottom: 16px !important;
+        left: 16px !important;
+        min-width: 56px !important;
+        height: 40px !important;
+        color: rgba(255, 255, 255, 0.9) !important;
+        font: 600 20px/40px -apple-system, system-ui, sans-serif !important;
+        text-align: center !important;
+        text-shadow: 0 0 4px rgba(0, 0, 0, 0.8) !important;
+        z-index: 2147483647 !important;
+        transform: rotate(-90deg) !important;
+        transform-origin: center !important;
+        pointer-events: none !important;
       }
     `;
 
@@ -561,6 +579,41 @@
     });
   }
 
+  function formatSpeedLabel(rate) {
+    return `${Number(rate.toFixed(2))}×`;
+  }
+
+  function ensureSpeedLabel() {
+    let label = document.getElementById(FAKE_FS_SPEED_LABEL_ID);
+    if (label) return label;
+
+    label = document.createElement('div');
+    label.id = FAKE_FS_SPEED_LABEL_ID;
+    (document.body || document.documentElement).appendChild(label);
+    return label;
+  }
+
+  function removeSpeedLabel() {
+    const label = document.getElementById(FAKE_FS_SPEED_LABEL_ID);
+    if (label) label.remove();
+  }
+
+  function updateSpeedLabel() {
+    const label = document.getElementById(FAKE_FS_SPEED_LABEL_ID);
+    if (!label || !fakeFullscreenProgressVideo) return;
+    label.textContent = formatSpeedLabel(fakeFullscreenProgressVideo.playbackRate);
+  }
+
+  function toggleFakeFullscreenPlayback() {
+    // Reparenting only the <video> orphans YouTube's own tap-to-pause handler
+    // (it lives on the player container), so restore the gesture here. Exit and
+    // speed buttons sit on <body>, not in the wrapper, so they never reach this.
+    const video = getFakeFullscreenVideo();
+    if (!video) return;
+    if (video.paused) playVideo(video);
+    else video.pause();
+  }
+
   function updateExitButtonProgress() {
     const btn = document.getElementById(FAKE_FS_EXIT_BTN_ID);
     if (!btn || !fakeFullscreenProgressVideo) return;
@@ -578,13 +631,16 @@
     fakeFullscreenProgressVideo = video;
     video.addEventListener('timeupdate', updateExitButtonProgress);
     video.addEventListener('durationchange', updateExitButtonProgress);
+    video.addEventListener('ratechange', updateSpeedLabel);
     updateExitButtonProgress();
+    updateSpeedLabel();
   }
 
   function stopExitButtonProgress() {
     if (!fakeFullscreenProgressVideo) return;
     fakeFullscreenProgressVideo.removeEventListener('timeupdate', updateExitButtonProgress);
     fakeFullscreenProgressVideo.removeEventListener('durationchange', updateExitButtonProgress);
+    fakeFullscreenProgressVideo.removeEventListener('ratechange', updateSpeedLabel);
     fakeFullscreenProgressVideo = null;
   }
 
@@ -606,6 +662,7 @@
     const wrapper = document.createElement('div');
     wrapper.id = FAKE_FS_WRAPPER_ID;
     wrapper.appendChild(video);
+    wrapper.addEventListener('click', toggleFakeFullscreenPlayback);
     document.body.appendChild(wrapper);
 
     fakeFullscreenOrigin = { video, placeholder, wrapper };
@@ -616,6 +673,7 @@
 
     ensureExitButton();
     ensureSpeedButtons();
+    ensureSpeedLabel();
     startExitButtonProgress(video);
   }
 
@@ -639,6 +697,7 @@
     removeBackdrop();
     removeExitButton();
     removeSpeedButtons();
+    removeSpeedLabel();
     stopExitButtonProgress();
 
     try {
