@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.9.0
-// @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
+// @version      0.9.1
+// @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and rotate-to-landscape fake fullscreen on iOS (manual trigger, with playback-speed controls).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
 // @grant        none
@@ -108,6 +108,12 @@
   const FAKE_FS_DOC_CLASS = 'tm-youtube-fake-fullscreen-active';
   const FAKE_FS_BACKDROP_ID = 'tm-youtube-fake-fullscreen-backdrop';
   const FAKE_FS_EXIT_BTN_ID = 'tm-youtube-fake-fullscreen-exit';
+  const FAKE_FS_SPEED_INC_BTN_ID = 'tm-youtube-fake-fullscreen-speed-inc';
+  const FAKE_FS_SPEED_DEC_BTN_ID = 'tm-youtube-fake-fullscreen-speed-dec';
+  const FAKE_FS_SPEED_BTN_CLASS = 'tm-youtube-fake-fullscreen-speed';
+  const FAKE_FS_SPEED_STEP = 0.5;
+  const FAKE_FS_SPEED_MIN = 0.25;
+  const FAKE_FS_SPEED_MAX = 5;
 
   const FULLSCREEN_BUTTON_SELECTOR = [
     '.fullscreen-icon',
@@ -434,6 +440,35 @@
         mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)) !important;
         pointer-events: none !important;
       }
+
+      .${FAKE_FS_SPEED_BTN_CLASS} {
+        position: fixed !important;
+        left: 16px !important;
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 50% !important;
+        border: 0 !important;
+        background: rgba(0, 0, 0, 0.65) !important;
+        color: #fff !important;
+        font: 26px/40px -apple-system, system-ui, sans-serif !important;
+        text-align: center !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        z-index: 2147483647 !important;
+        transform: rotate(-90deg) !important;
+        transform-origin: center !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+
+      /* Overlay is rotated -90deg, so these physical top-left buttons render at
+         the user's upper-right; a larger top offset shifts a button left there. */
+      #${FAKE_FS_SPEED_DEC_BTN_ID} {
+        top: 64px !important;
+      }
+
+      #${FAKE_FS_SPEED_INC_BTN_ID} {
+        top: 16px !important;
+      }
     `;
 
     (document.head || document.documentElement).appendChild(style);
@@ -476,6 +511,54 @@
   function removeExitButton() {
     const btn = document.getElementById(FAKE_FS_EXIT_BTN_ID);
     if (btn) btn.remove();
+  }
+
+  function getFakeFullscreenVideo() {
+    return (fakeFullscreenOrigin && fakeFullscreenOrigin.video)
+      || fakeFullscreenProgressVideo
+      || getActiveVideo();
+  }
+
+  function adjustPlaybackRate(delta) {
+    const video = getFakeFullscreenVideo();
+    if (!video) return;
+    const next = Math.min(
+      FAKE_FS_SPEED_MAX,
+      Math.max(FAKE_FS_SPEED_MIN, Math.round((video.playbackRate + delta) * 100) / 100)
+    );
+    video.playbackRate = next;
+  }
+
+  function ensureSpeedButton(id, label, delta) {
+    let btn = document.getElementById(id);
+    if (btn) return btn;
+
+    btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.className = FAKE_FS_SPEED_BTN_CLASS;
+    btn.setAttribute('aria-label', delta > 0 ? 'Increase playback speed' : 'Decrease playback speed');
+    btn.textContent = label;
+    btn.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      adjustPlaybackRate(delta);
+    }, true);
+
+    (document.body || document.documentElement).appendChild(btn);
+    return btn;
+  }
+
+  function ensureSpeedButtons() {
+    ensureSpeedButton(FAKE_FS_SPEED_INC_BTN_ID, '+', FAKE_FS_SPEED_STEP);
+    ensureSpeedButton(FAKE_FS_SPEED_DEC_BTN_ID, '−', -FAKE_FS_SPEED_STEP);
+  }
+
+  function removeSpeedButtons() {
+    [FAKE_FS_SPEED_INC_BTN_ID, FAKE_FS_SPEED_DEC_BTN_ID].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.remove();
+    });
   }
 
   function updateExitButtonProgress() {
@@ -532,6 +615,7 @@
     if (wasPlaying && video.paused) playVideo(video);
 
     ensureExitButton();
+    ensureSpeedButtons();
     startExitButtonProgress(video);
   }
 
@@ -554,6 +638,7 @@
 
     removeBackdrop();
     removeExitButton();
+    removeSpeedButtons();
     stopExitButtonProgress();
 
     try {

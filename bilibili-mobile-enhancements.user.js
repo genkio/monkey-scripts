@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili Mobile Enhancements
 // @namespace    local.bilibili.mobile-enhancements
-// @version      0.2.6
+// @version      0.2.7
 // @description  Mobile-focused Bilibili layout tweaks.
 // @match        https://m.bilibili.com/*
 // @match        https://t.bilibili.com/*
@@ -20,6 +20,12 @@
   const FAKE_FS_BACKDROP_ID = 'bme-fake-fullscreen-backdrop';
   const FAKE_FS_WRAPPER_ID = 'bme-fake-fullscreen-wrapper';
   const FAKE_FS_EXIT_BTN_ID = 'bme-fake-fullscreen-exit';
+  const FAKE_FS_SPEED_INC_BTN_ID = 'bme-fake-fullscreen-speed-inc';
+  const FAKE_FS_SPEED_DEC_BTN_ID = 'bme-fake-fullscreen-speed-dec';
+  const FAKE_FS_SPEED_BTN_CLASS = 'bme-fake-fullscreen-speed';
+  const FAKE_FS_SPEED_STEP = 0.5;
+  const FAKE_FS_SPEED_MIN = 0.25;
+  const FAKE_FS_SPEED_MAX = 5;
   const RELATED_CARD_SELECTOR = '.m-video-related .v-card-toapp';
   const CENTER_PLAY_SELECTOR = [
     '.bpx-player-video-btn-start',
@@ -239,6 +245,35 @@
         mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px)) !important;
         pointer-events: none !important;
       }
+
+      .${FAKE_FS_SPEED_BTN_CLASS} {
+        position: fixed !important;
+        left: 16px !important;
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 50% !important;
+        border: 0 !important;
+        background: rgba(0, 0, 0, 0.65) !important;
+        color: #fff !important;
+        font: 26px/40px -apple-system, system-ui, sans-serif !important;
+        text-align: center !important;
+        padding: 0 !important;
+        cursor: pointer !important;
+        z-index: 2147483647 !important;
+        transform: rotate(-90deg) !important;
+        transform-origin: center !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+
+      /* Overlay is rotated -90deg, so these physical top-left buttons render at
+         the user's upper-right; a larger top offset shifts a button left there. */
+      #${FAKE_FS_SPEED_DEC_BTN_ID} {
+        top: 64px !important;
+      }
+
+      #${FAKE_FS_SPEED_INC_BTN_ID} {
+        top: 16px !important;
+      }
     `;
 
     (document.head || document.documentElement).appendChild(style);
@@ -413,6 +448,54 @@
     if (btn) btn.remove();
   }
 
+  function getFakeFullscreenVideo() {
+    return (fakeFullscreenOrigin && fakeFullscreenOrigin.video)
+      || fakeFullscreenProgressVideo
+      || getActiveVideo();
+  }
+
+  function adjustPlaybackRate(delta) {
+    const video = getFakeFullscreenVideo();
+    if (!video) return;
+    const next = Math.min(
+      FAKE_FS_SPEED_MAX,
+      Math.max(FAKE_FS_SPEED_MIN, Math.round((video.playbackRate + delta) * 100) / 100)
+    );
+    video.playbackRate = next;
+  }
+
+  function ensureSpeedButton(id, label, delta) {
+    let btn = document.getElementById(id);
+    if (btn) return btn;
+
+    btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.className = FAKE_FS_SPEED_BTN_CLASS;
+    btn.setAttribute('aria-label', delta > 0 ? 'Increase playback speed' : 'Decrease playback speed');
+    btn.textContent = label;
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      adjustPlaybackRate(delta);
+    }, true);
+
+    (document.body || document.documentElement).appendChild(btn);
+    return btn;
+  }
+
+  function ensureSpeedButtons() {
+    ensureSpeedButton(FAKE_FS_SPEED_INC_BTN_ID, '+', FAKE_FS_SPEED_STEP);
+    ensureSpeedButton(FAKE_FS_SPEED_DEC_BTN_ID, '−', -FAKE_FS_SPEED_STEP);
+  }
+
+  function removeSpeedButtons() {
+    [FAKE_FS_SPEED_INC_BTN_ID, FAKE_FS_SPEED_DEC_BTN_ID].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.remove();
+    });
+  }
+
   function updateExitButtonProgress() {
     const btn = document.getElementById(FAKE_FS_EXIT_BTN_ID);
     if (!btn || !fakeFullscreenProgressVideo) return;
@@ -464,6 +547,7 @@
     if (wasPlaying && video.paused) playVideo(video);
 
     ensureExitButton();
+    ensureSpeedButtons();
     startExitButtonProgress(video);
   }
 
@@ -487,6 +571,7 @@
 
     removeBackdrop();
     removeExitButton();
+    removeSpeedButtons();
     stopExitButtonProgress();
 
     try {
