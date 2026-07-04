@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.8.13
-// @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, keep iOS background playback alive, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
+// @version      0.9.0
+// @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and rotate-to-landscape fake fullscreen on iOS (manual trigger).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
 // @grant        none
@@ -16,13 +16,6 @@
   const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
   const IS_IOS = /iP(ad|hone|od)/.test(navigator.platform)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const BACKGROUND_PLAY_EVENTS = [
-    'visibilitychange',
-    'webkitvisibilitychange',
-    'pagehide',
-    'freeze',
-    'blur'
-  ];
 
   const THUMBNAIL_CONTAINER_SELECTOR = [
     'ytd-thumbnail',
@@ -128,8 +121,6 @@
 
   let scheduled = false;
   let unmuteTimer = null;
-  let backgroundResumeUntil = 0;
-  let backgroundResumeTimer = null;
   let fakeFullscreenActive = false;
   // { video, placeholder, wrapper } — captured on enter so exit can put the
   // video back exactly where YouTube had it. Placeholder is a comment node.
@@ -203,14 +194,6 @@
     } else if (location.pathname !== '/') {
       location.assign('/');
     }
-  }
-
-  function shouldKeepBackgroundPlaybackAlive() {
-    return IS_IOS && isVideoPage();
-  }
-
-  function isBackgroundResumeWindowActive() {
-    return shouldKeepBackgroundPlaybackAlive() && Date.now() < backgroundResumeUntil;
   }
 
   function removeThumbnailElement(el) {
@@ -305,41 +288,6 @@
     }
   }
 
-  function resumeBackgroundVideo(video) {
-    if (!isBackgroundResumeWindowActive() || !video) return;
-    unmuteVideo(video);
-    if (video.paused) playVideo(video);
-  }
-
-  function startBackgroundResumeWindow() {
-    if (!shouldKeepBackgroundPlaybackAlive()) return;
-
-    backgroundResumeUntil = Date.now() + 6000;
-    if (backgroundResumeTimer) return;
-
-    let tries = 0;
-    backgroundResumeTimer = setInterval(() => {
-      tries++;
-      resumeBackgroundVideo(getActiveVideo());
-
-      if (!isBackgroundResumeWindowActive() || tries >= 24) {
-        clearInterval(backgroundResumeTimer);
-        backgroundResumeTimer = null;
-      }
-    }, 250);
-  }
-
-  function preventBackgroundPauseEvent(event) {
-    if (!shouldKeepBackgroundPlaybackAlive()) return;
-
-    startBackgroundResumeWindow();
-    event.stopImmediatePropagation();
-
-    if (typeof event.preventDefault === 'function') {
-      event.preventDefault();
-    }
-  }
-
   function hookVideo(video) {
     if (!(video instanceof HTMLVideoElement)) return;
     if (video.dataset.youtubeEnhancementsUnmuteHooked === 'true') return;
@@ -350,7 +298,6 @@
     video.addEventListener('loadedmetadata', maybeUnmute);
     video.addEventListener('canplay', maybeUnmute);
     video.addEventListener('playing', maybeUnmute);
-    video.addEventListener('pause', () => resumeBackgroundVideo(video), true);
   }
 
   function hookVideos() {
@@ -685,17 +632,6 @@
     startUnmuteWindow();
   }
 
-  function overrideProperty(target, name, value) {
-    try {
-      Object.defineProperty(target, name, {
-        configurable: true,
-        get: () => value
-      });
-    } catch {
-      // Some browser properties are not configurable.
-    }
-  }
-
   function overrideMethod(target, name, fn) {
     try {
       Object.defineProperty(target, name, {
@@ -705,47 +641,6 @@
     } catch {
       // Some browser methods are not configurable.
     }
-  }
-
-  function forceVisiblePageState() {
-    overrideProperty(document, 'hidden', false);
-    overrideProperty(document, 'visibilityState', 'visible');
-    overrideProperty(document, 'webkitHidden', false);
-    overrideProperty(document, 'webkitVisibilityState', 'visible');
-    overrideMethod(document, 'hasFocus', () => true);
-
-    if (typeof Document !== 'undefined') {
-      overrideProperty(Document.prototype, 'hidden', false);
-      overrideProperty(Document.prototype, 'visibilityState', 'visible');
-      overrideProperty(Document.prototype, 'webkitHidden', false);
-      overrideProperty(Document.prototype, 'webkitVisibilityState', 'visible');
-      overrideMethod(Document.prototype, 'hasFocus', () => true);
-    }
-  }
-
-  function patchMediaPause() {
-    const originalPause = HTMLMediaElement.prototype.pause;
-
-    HTMLMediaElement.prototype.pause = function (...args) {
-      if (this instanceof HTMLVideoElement && isBackgroundResumeWindowActive()) {
-        resumeBackgroundVideo(this);
-        return undefined;
-      }
-
-      return originalPause.apply(this, args);
-    };
-  }
-
-  function installBackgroundPlaybackGuards() {
-    if (!IS_IOS) return;
-
-    forceVisiblePageState();
-    patchMediaPause();
-
-    BACKGROUND_PLAY_EVENTS.forEach(eventName => {
-      window.addEventListener(eventName, preventBackgroundPauseEvent, true);
-      document.addEventListener(eventName, preventBackgroundPauseEvent, true);
-    });
   }
 
   function patchHistory() {
@@ -792,7 +687,6 @@
   // intercept the click before YouTube's bubble-phase handlers see it.
   document.addEventListener('click', blockShortsClicks, true);
 
-  installBackgroundPlaybackGuards();
   installFakeFullscreen();
   ensureStyles();
 
