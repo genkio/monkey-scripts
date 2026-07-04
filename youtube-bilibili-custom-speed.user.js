@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube + Bilibili Custom Speed
 // @namespace    http://tampermonkey.net/
-// @version      3.5.1
+// @version      3.5.2
 // @description  Default YouTube and Bilibili playback speeds
 // @match        *://www.youtube.com/*
 // @match        *://m.youtube.com/*
@@ -15,8 +15,8 @@
     'use strict';
 
     const SPEEDS = {
-        youtube: 2.25,
-        bilibili: 2.5
+        youtube: 2,
+        bilibili: 2.25
     };
 
     let lastVideo = null;
