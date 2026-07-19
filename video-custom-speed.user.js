@@ -20,7 +20,7 @@
 
     const SITE_SPEEDS = [
         { domain: 'youtube.com', speed: 2 },
-        { domain: 'bilibili.com', speed: 2.25 },
+        { domain: 'bilibili.com', speed: 2 },
         { domain: 'x.com', speed: 2 },
         { domain: 'twitter.com', speed: 2 },
     ];

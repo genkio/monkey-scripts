@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bilibili Mobile Enhancements
 // @namespace    local.bilibili.mobile-enhancements
-// @version      0.2.8
-// @description  Mobile-focused Bilibili layout tweaks.
+// @version      0.2.9
+// @description  Mobile-focused Bilibili layout tweaks with fake-fullscreen playback controls.
 // @match        https://m.bilibili.com/*
 // @match        https://t.bilibili.com/*
 // @grant        none
@@ -27,6 +27,7 @@
   const FAKE_FS_SPEED_STEP = 0.5;
   const FAKE_FS_SPEED_MIN = 0.25;
   const FAKE_FS_SPEED_MAX = 5;
+  const FAKE_FS_SEEK_SECONDS = 30;
   const RELATED_CARD_SELECTOR = '.m-video-related .v-card-toapp';
   const CENTER_PLAY_SELECTOR = [
     '.bpx-player-video-btn-start',
@@ -539,6 +540,32 @@
     label.textContent = formatSpeedLabel(fakeFullscreenProgressVideo.playbackRate);
   }
 
+  function handleFakeFullscreenTap(event) {
+    const video = getFakeFullscreenVideo();
+    if (!video) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    // The overlay is rotated -90deg: physical top is the viewer's right side.
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = (event.clientY - rect.top) / rect.height;
+    if (position < 1 / 3) {
+      video.currentTime = Math.min(
+        Number.isFinite(video.duration) ? video.duration : Infinity,
+        video.currentTime + FAKE_FS_SEEK_SECONDS
+      );
+      return;
+    }
+    if (position > 2 / 3) {
+      video.currentTime = Math.max(0, video.currentTime - FAKE_FS_SEEK_SECONDS);
+      return;
+    }
+
+    if (video.paused) playVideo(video);
+    else video.pause();
+  }
+
   function updateExitButtonProgress() {
     const btn = document.getElementById(FAKE_FS_EXIT_BTN_ID);
     if (!btn || !fakeFullscreenProgressVideo) return;
@@ -587,6 +614,7 @@
     const wrapper = document.createElement('div');
     wrapper.id = FAKE_FS_WRAPPER_ID;
     wrapper.appendChild(video);
+    wrapper.addEventListener('click', handleFakeFullscreenTap, true);
     document.body.appendChild(wrapper);
 
     fakeFullscreenOrigin = { video, placeholder, wrapper };

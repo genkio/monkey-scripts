@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         YouTube Enhancements
 // @namespace    local.youtube.enhancements
-// @version      0.9.2
-// @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and rotate-to-landscape fake fullscreen on iOS (manual trigger, with playback-speed controls).
+// @version      0.9.3
+// @description  Remove YouTube thumbnails and Shorts, auto-unmute video pages, and rotate-to-landscape fake fullscreen on iOS (manual trigger, with playback-speed and seek controls).
 // @match        https://www.youtube.com/*
 // @match        https://m.youtube.com/*
 // @grant        none
@@ -115,6 +115,7 @@
   const FAKE_FS_SPEED_STEP = 0.5;
   const FAKE_FS_SPEED_MIN = 0.25;
   const FAKE_FS_SPEED_MAX = 5;
+  const FAKE_FS_SEEK_SECONDS = 30;
 
   const FULLSCREEN_BUTTON_SELECTOR = [
     '.fullscreen-icon',
@@ -604,12 +605,30 @@
     label.textContent = formatSpeedLabel(fakeFullscreenProgressVideo.playbackRate);
   }
 
-  function toggleFakeFullscreenPlayback() {
+  function handleFakeFullscreenTap(event) {
     // Reparenting only the <video> orphans YouTube's own tap-to-pause handler
-    // (it lives on the player container), so restore the gesture here. Exit and
-    // speed buttons sit on <body>, not in the wrapper, so they never reach this.
+    // (it lives on the player container), so restore the gesture here. The
+    // rotated overlay's physical top is the viewer's right (forward) side.
     const video = getFakeFullscreenVideo();
     if (!video) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = (event.clientY - rect.top) / rect.height;
+    if (position < 1 / 3) {
+      video.currentTime = Math.min(
+        Number.isFinite(video.duration) ? video.duration : Infinity,
+        video.currentTime + FAKE_FS_SEEK_SECONDS
+      );
+      return;
+    }
+    if (position > 2 / 3) {
+      video.currentTime = Math.max(0, video.currentTime - FAKE_FS_SEEK_SECONDS);
+      return;
+    }
+
     if (video.paused) playVideo(video);
     else video.pause();
   }
@@ -662,7 +681,7 @@
     const wrapper = document.createElement('div');
     wrapper.id = FAKE_FS_WRAPPER_ID;
     wrapper.appendChild(video);
-    wrapper.addEventListener('click', toggleFakeFullscreenPlayback);
+    wrapper.addEventListener('click', handleFakeFullscreenTap, true);
     document.body.appendChild(wrapper);
 
     fakeFullscreenOrigin = { video, placeholder, wrapper };
