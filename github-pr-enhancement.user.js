@@ -1,8 +1,9 @@
 // ==UserScript==
-// @name         GitHub PR Patch Cleaner
-// @namespace    local.github.pr.patch.cleaner
-// @version      1.1.0
-// @description  Clean noisy file diffs from GitHub PR .patch pages for easier LLM copy/paste.
+// @name         GitHub PR Enhancement
+// @namespace    local.github.pr.enhancement
+// @version      1.2.1
+// @description  Add useful enhancements to GitHub PR pages and clean noisy .patch file diffs.
+// @match        https://github.com/*/*/pull/*
 // @match        https://github.com/*/pull/*.patch*
 // @match        https://patch-diff.githubusercontent.com/raw/*
 // @grant        GM_setClipboard
@@ -15,6 +16,7 @@
   const STYLE_ID = 'tm-github-patch-cleaner-style';
   const ROOT_ID = 'tm-github-patch-cleaner-root';
   const STORAGE_KEY = 'tm-github-patch-cleaner-view';
+  const COMMENT_ID_CLASS = 'tm-github-comment-id';
   const VIEW_MODE = {
     cleaned: 'cleaned',
     original: 'original'
@@ -348,6 +350,85 @@
     return false;
   }
 
+  function getCommentDetails(link) {
+    const url = new URL(link.href, window.location.href);
+    const discussionMatch = url.hash.match(/^#discussion_(r\d+)$/);
+    if (discussionMatch) {
+      return { id: discussionMatch[1], url: url.href };
+    }
+
+    const issueCommentMatch = url.hash.match(/^#(issuecomment-\d+)$/);
+    if (issueCommentMatch) {
+      return { id: issueCommentMatch[1], url: url.href };
+    }
+
+    return null;
+  }
+
+  function addCommentId(link) {
+    if (!link.querySelector('relative-time')) return;
+    if (link.nextElementSibling?.classList.contains(COMMENT_ID_CLASS)) return;
+
+    const details = getCommentDetails(link);
+    if (!details) return;
+
+    const commentId = document.createElement('button');
+    commentId.type = 'button';
+    commentId.className = COMMENT_ID_CLASS;
+    commentId.textContent = details.id;
+    commentId.title = `Copy ${details.url}`;
+    commentId.addEventListener('click', () => {
+      const copied = copyToClipboard(details.url);
+      commentId.textContent = copied ? 'Copied!' : 'Copy failed';
+      window.setTimeout(() => {
+        commentId.textContent = details.id;
+      }, 1200);
+    });
+
+    link.insertAdjacentElement('afterend', commentId);
+  }
+
+  function enhanceCommentPermalinks(root = document) {
+    const selector = 'a[href*="#discussion_r"], a[href*="#issuecomment-"]';
+
+    if (typeof root.closest === 'function') {
+      const containingLink = root.closest(selector);
+      if (containingLink) addCommentId(containingLink);
+    }
+    root.querySelectorAll(selector).forEach(addCommentId);
+  }
+
+  function enhancePullRequestPage() {
+    const style = document.createElement('style');
+    style.textContent = `
+      .${COMMENT_ID_CLASS} {
+        appearance: none;
+        border: 0;
+        background: none;
+        color: var(--fgColor-accent, var(--color-accent-fg));
+        margin-left: 4px;
+        padding: 0;
+        cursor: pointer;
+        font: inherit;
+      }
+      .${COMMENT_ID_CLASS}:hover {
+        text-decoration: underline;
+      }
+    `;
+    document.head.appendChild(style);
+
+    enhanceCommentPermalinks();
+    new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (typeof node.querySelectorAll === 'function') {
+            enhanceCommentPermalinks(node);
+          }
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
   function renderToolbar(pre, originalText, cleanedText, omitted) {
     const root = document.createElement('section');
     root.id = ROOT_ID;
@@ -357,7 +438,7 @@
 
     const title = document.createElement('div');
     title.className = 'tm-title';
-    title.textContent = 'GitHub PR Patch Cleaner';
+    title.textContent = 'GitHub PR Enhancement';
     header.appendChild(title);
 
     const hideButton = document.createElement('button');
@@ -433,7 +514,7 @@
     setMode(getStoredViewMode());
   }
 
-  function main() {
+  function cleanPatchPage() {
     const originalText = getTextBody();
     if (!originalText.trim().includes('diff --git ')) return;
 
@@ -441,6 +522,16 @@
     ensureStyles();
     const pre = replaceBodyWithPre(cleanedText);
     renderToolbar(pre, originalText, cleanedText, omitted);
+  }
+
+  function main() {
+    if (/^\/[^/]+\/[^/]+\/pull\/\d+/.test(window.location.pathname) &&
+        !window.location.pathname.endsWith('.patch')) {
+      enhancePullRequestPage();
+      return;
+    }
+
+    cleanPatchPage();
   }
 
   if (document.readyState === 'loading') {

@@ -5,7 +5,7 @@ Current scripts:
 
 - `chatgpt-auto-temporary-chat.user.js`: automatically enables temporary chat on ChatGPT.
 - `disable-autofocus.user.js`: prevents any website from auto-focusing text inputs, textareas, or contenteditable fields on page load so the page doesn't steal your keyboard; stops blocking the moment you actually interact.
-- `github-pr-patch-cleaner.user.js`: cleans noisy sections from GitHub PR `.patch` pages and raw patch URLs, replacing lockfiles and binary/non-text diffs with compact placeholders for easier LLM copy/paste.
+- `github-pr-enhancement.user.js`: adds copyable comment IDs beside timestamps on GitHub PR pages and cleans noisy sections from `.patch` pages and raw patch URLs.
 - `hackernews-reader-mode.user.js`: rewrites Hacker News item pages as a single clean article so iOS Safari Reader Mode can read the thread aloud, flattening nested comments with spoken parent attribution (e.g. "bob replying to alice").
 - `praise-timesheet-balance.user.js`: adds an "Extra / Short" card to Praise timesheets, showing total worked hours minus worked days × 8h.
 - `slack-custom-experience.user.js`: personal Slack web tweaks. Currently frees `Cmd+Shift+A` (Slack's "All unreads") by swallowing it before Slack's handler without preventing default, so the browser keybinding (e.g. Brave tab search) wins.
