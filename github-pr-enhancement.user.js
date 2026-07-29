@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub PR Enhancement
 // @namespace    local.github.pr.enhancement
-// @version      1.2.1
+// @version      1.2.2
 // @description  Add useful enhancements to GitHub PR pages and clean noisy .patch file diffs.
 // @match        https://github.com/*/*/pull/*
 // @match        https://github.com/*/pull/*.patch*
@@ -350,17 +350,14 @@
     return false;
   }
 
-  function getCommentDetails(link) {
-    const url = new URL(link.href, window.location.href);
-    const discussionMatch = url.hash.match(/^#discussion_(r\d+)$/);
-    if (discussionMatch) {
-      return { id: discussionMatch[1], url: url.href };
-    }
+  function getCommentId(link) {
+    const { hash } = new URL(link.href, window.location.href);
 
-    const issueCommentMatch = url.hash.match(/^#(issuecomment-\d+)$/);
-    if (issueCommentMatch) {
-      return { id: issueCommentMatch[1], url: url.href };
-    }
+    const discussionMatch = hash.match(/^#discussion_(r\d+)$/);
+    if (discussionMatch) return discussionMatch[1];
+
+    const issueCommentMatch = hash.match(/^#(issuecomment-\d+)$/);
+    if (issueCommentMatch) return issueCommentMatch[1];
 
     return null;
   }
@@ -369,19 +366,19 @@
     if (!link.querySelector('relative-time')) return;
     if (link.nextElementSibling?.classList.contains(COMMENT_ID_CLASS)) return;
 
-    const details = getCommentDetails(link);
-    if (!details) return;
+    const id = getCommentId(link);
+    if (!id) return;
 
     const commentId = document.createElement('button');
     commentId.type = 'button';
     commentId.className = COMMENT_ID_CLASS;
-    commentId.textContent = details.id;
-    commentId.title = `Copy ${details.url}`;
+    commentId.textContent = id;
+    commentId.title = `Copy ${id}`;
     commentId.addEventListener('click', () => {
-      const copied = copyToClipboard(details.url);
+      const copied = copyToClipboard(id);
       commentId.textContent = copied ? 'Copied!' : 'Copy failed';
       window.setTimeout(() => {
-        commentId.textContent = details.id;
+        commentId.textContent = id;
       }, 1200);
     });
 
