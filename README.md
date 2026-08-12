@@ -8,6 +8,7 @@ Current scripts:
 - `github-pr-enhancement.user.js`: adds copyable comment IDs beside timestamps on GitHub PR pages and cleans noisy sections from `.patch` pages and raw patch URLs.
 - `hackernews-reader-mode.user.js`: rewrites Hacker News item pages as a single clean article so iOS Safari Reader Mode can read the thread aloud, flattening nested comments with spoken parent attribution (e.g. "bob replying to alice").
 - `praise-timesheet-balance.user.js`: adds an "Extra / Short" card to Praise timesheets, showing total worked hours minus worked days × 8h.
+- `reddit-enhancements.user.js`: removes the `old.reddit.com` sidebar (`div.side` / `aside.read-next`) so the middle column uses the full viewport width, which reads better on mobile.
 - `slack-custom-experience.user.js`: personal Slack web tweaks. Currently frees `Cmd+Shift+A` (Slack's "All unreads") by swallowing it before Slack's handler without preventing default, so the browser keybinding (e.g. Brave tab search) wins.
 - `slack-emoji-for-github.user.js`: caches Slack custom emoji names and adds GitHub textarea autocomplete.
 - `video-custom-speed.user.js`: applies preferred playback speeds on YouTube, Bilibili, and X/Twitter (handles X's data-saver tap-to-play).
