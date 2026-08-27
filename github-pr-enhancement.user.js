@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitHub PR Enhancement
 // @namespace    local.github.pr.enhancement
-// @version      1.2.2
+// @version      1.3.1
 // @description  Add useful enhancements to GitHub PR pages and clean noisy .patch file diffs.
 // @match        https://github.com/*/*/pull/*
 // @match        https://github.com/*/pull/*.patch*
@@ -362,13 +362,7 @@
     return null;
   }
 
-  function addCommentId(link) {
-    if (!link.querySelector('relative-time')) return;
-    if (link.nextElementSibling?.classList.contains(COMMENT_ID_CLASS)) return;
-
-    const id = getCommentId(link);
-    if (!id) return;
-
+  function createCommentIdButton(id) {
     const commentId = document.createElement('button');
     commentId.type = 'button';
     commentId.className = COMMENT_ID_CLASS;
@@ -381,18 +375,43 @@
         commentId.textContent = id;
       }, 1200);
     });
+    return commentId;
+  }
 
-    link.insertAdjacentElement('afterend', commentId);
+  function addCommentId(link) {
+    if (!link.querySelector('relative-time')) return;
+    if (link.nextElementSibling?.classList.contains(COMMENT_ID_CLASS)) return;
+
+    const id = getCommentId(link);
+    if (!id) return;
+
+    link.insertAdjacentElement('afterend', createCommentIdButton(id));
+  }
+
+  function addReviewId(anchor) {
+    const id = new URL(anchor.href, window.location.href).hash.slice(1);
+    if (!/^pullrequestreview-\d+$/.test(id)) return;
+
+    const header = anchor.parentElement?.querySelector('.timeline-comment-header');
+    const target = header?.querySelector('h3 > div');
+    if (!target || target.querySelector(`.${COMMENT_ID_CLASS}`)) return;
+
+    target.appendChild(createCommentIdButton(id));
   }
 
   function enhanceCommentPermalinks(root = document) {
     const selector = 'a[href*="#discussion_r"], a[href*="#issuecomment-"]';
+    const reviewSelector = 'a[href*="#pullrequestreview-"]';
 
     if (typeof root.closest === 'function') {
       const containingLink = root.closest(selector);
       if (containingLink) addCommentId(containingLink);
+
+      const containingReview = root.closest(reviewSelector);
+      if (containingReview) addReviewId(containingReview);
     }
     root.querySelectorAll(selector).forEach(addCommentId);
+    root.querySelectorAll(reviewSelector).forEach(addReviewId);
   }
 
   function enhancePullRequestPage() {
