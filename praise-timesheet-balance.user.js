@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Praise Timesheet Balance
 // @namespace    local.praise.timesheet.balance
-// @version      1.0.0
-// @description  Add an Extra / Short card to Praise timesheets based on worked days * 8h versus total worked hours.
+// @version      1.5.0
+// @description  Show the current catch-up gap or the clock-out time that closes it.
 // @match        https://praise.pafin.com/time/my-timesheet*
 // @run-at       document-idle
 // @grant        none
@@ -12,14 +12,22 @@
   'use strict';
 
   const CARD_ID = 'tm-praise-timesheet-balance-card';
+  const LABEL_ID = 'tm-praise-timesheet-balance-label';
   const VALUE_ID = 'tm-praise-timesheet-balance-value';
-  const LABEL_TEXT = 'Extra / Short';
+  const ACTIVE_LABEL_TEXT = 'Clock Out At';
+  const INACTIVE_LABEL_TEXT = 'Catch Up';
   const TOTAL_HOURS_LABEL = 'Total Hours Worked';
-  const WORKED_DAYS_LABEL = 'Worked Days';
-  const EXPECTED_MINUTES_PER_WORKED_DAY = 8 * 60;
+  const TIME_CLOCK_LABEL = 'Time Clock';
+  const CLOCKED_IN_LABEL = 'Clocked In';
+  const ON_BREAK_LABEL = 'On Break';
+  const WORKING_DAY_LABEL = 'Working Day';
+  const HALF_DAY_LEAVE_LABELS = ['AM Leave', 'PM Leave'];
+  const EXPECTED_MINUTES_PER_WORKING_DAY = 8 * 60;
   const UPDATE_DELAY_MS = 100;
+  const LIVE_UPDATE_INTERVAL_MS = 1000;
 
   let updateTimer = 0;
+  let liveAnchor = null;
 
   function normalizeText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
@@ -61,40 +69,109 @@
     return Math.round(hours * 60) + minutes;
   }
 
-  function parseWorkedDays(text) {
-    const match = normalizeText(text).match(/^(\d+(?:\.\d+)?)/);
-    if (!match) return null;
+  function parseDurationSeconds(text) {
+    const normalized = normalizeText(text);
+    const hourMatch = normalized.match(/(\d+)\s*h/i);
+    const minuteMatch = normalized.match(/(\d+)\s*m/i);
+    const secondMatch = normalized.match(/(\d+)\s*s/i);
 
-    const days = Number(match[1]);
-    return Number.isFinite(days) ? days : null;
+    if (!secondMatch) return null;
+
+    const hours = hourMatch ? Number(hourMatch[1]) : 0;
+    const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+    const seconds = Number(secondMatch[1]);
+
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+
+    return (hours * 60 * 60) + (minutes * 60) + seconds;
   }
 
-  function formatSignedDuration(totalMinutes) {
-    const roundedMinutes = Math.round(totalMinutes);
-    if (roundedMinutes === 0) return '0h';
+  function findClockState() {
+    const card = findStatCard(TIME_CLOCK_LABEL);
+    if (!card) return { isActive: false, timerSeconds: null };
 
-    const sign = roundedMinutes > 0 ? '+' : '-';
-    const absoluteMinutes = Math.abs(roundedMinutes);
-    const hours = Math.floor(absoluteMinutes / 60);
-    const minutes = absoluteMinutes % 60;
+    const isWorking = Boolean(findElementByExactText(card, CLOCKED_IN_LABEL));
+    const isOnBreak = Boolean(findElementByExactText(card, ON_BREAK_LABEL));
+    if (!isWorking && !isOnBreak) return { isActive: false, timerSeconds: null };
+
+    if (isOnBreak) return { isActive: true, timerSeconds: null };
+
+    for (const element of card.querySelectorAll('.rt-r-weight-bold')) {
+      const seconds = parseDurationSeconds(element.textContent);
+      if (seconds !== null) return { isActive: true, timerSeconds: seconds };
+    }
+
+    return { isActive: true, timerSeconds: null };
+  }
+
+  function parseRowDate(text) {
+    const normalized = normalizeText(text).replace(/\s*\([^)]*\)\s*$/, '');
+    const timestamp = Date.parse(`${normalized} 00:00:00`);
+    return Number.isNaN(timestamp) ? null : new Date(timestamp);
+  }
+
+  function findRequiredMinutesToDate() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let foundDate = false;
+    let requiredMinutes = 0;
+
+    for (const row of document.querySelectorAll('table tbody tr')) {
+      const cells = row.querySelectorAll('td');
+      if (cells.length < 2) continue;
+
+      const date = parseRowDate(cells[0].textContent);
+      if (!date) continue;
+
+      foundDate = true;
+      if (date > today) continue;
+
+      const dayType = normalizeText(cells[1].textContent);
+      if (!dayType.includes(WORKING_DAY_LABEL)) continue;
+
+      const isHalfDayLeave = HALF_DAY_LEAVE_LABELS.some((label) => dayType.includes(label));
+      requiredMinutes += isHalfDayLeave
+        ? EXPECTED_MINUTES_PER_WORKING_DAY / 2
+        : EXPECTED_MINUTES_PER_WORKING_DAY;
+    }
+
+    return foundDate ? requiredMinutes : null;
+  }
+
+  function isViewingCurrentMonth() {
+    const now = new Date();
+    const params = new URLSearchParams(window.location.search);
+    const year = Number(params.get('year') || now.getFullYear());
+    const month = Number(params.get('month') || now.getMonth() + 1);
+    return year === now.getFullYear() && month === now.getMonth() + 1;
+  }
+
+  function formatClockTime(timestamp) {
+    const date = new Date(timestamp);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+
+  function formatRemainingDuration(totalSeconds) {
+    const roundedMinutes = Math.ceil(totalSeconds / 60);
+    if (roundedMinutes === 0) return 'Caught Up';
+
+    const hours = Math.floor(roundedMinutes / 60);
+    const minutes = roundedMinutes % 60;
     const parts = [];
 
     if (hours > 0) parts.push(`${hours}h`);
     if (minutes > 0) parts.push(`${minutes}m`);
 
-    return `${sign}${parts.join(' ')}`;
+    return parts.join(' ');
   }
 
-  function setBalanceColor(valueElement, balanceMinutes) {
+  function setValueColor(valueElement, isActive, remainingSeconds) {
     if (!valueElement) return;
 
-    let color = 'var(--gray-11)';
-
-    if (balanceMinutes > 0) {
-      color = 'var(--green-11)';
-    } else if (balanceMinutes < 0) {
-      color = 'var(--red-11)';
-    }
+    const color = isActive || remainingSeconds === 0 ? 'var(--green-11)' : 'var(--red-11)';
 
     if (valueElement.style.color !== color) valueElement.style.color = color;
   }
@@ -102,7 +179,7 @@
   function createBalanceCard(sampleCard) {
     const card = sampleCard.cloneNode(true);
     card.id = CARD_ID;
-    card.title = 'Total Hours Worked minus Worked Days x 8h';
+    card.title = 'Clock-out time that meets required working hours elapsed to date';
 
     for (const button of card.querySelectorAll('button')) {
       button.remove();
@@ -114,7 +191,10 @@
     }
 
     const oldLabel = findElementByExactText(card, TOTAL_HOURS_LABEL);
-    if (oldLabel) oldLabel.textContent = LABEL_TEXT;
+    if (oldLabel) {
+      oldLabel.id = LABEL_ID;
+      oldLabel.textContent = INACTIVE_LABEL_TEXT;
+    }
 
     const valueElement = card.querySelector('.rt-r-weight-bold');
     if (valueElement) {
@@ -143,22 +223,47 @@
     if (!totalCard) return;
 
     const totalMinutes = parseDurationMinutes(findStatValue(TOTAL_HOURS_LABEL));
-    const workedDays = parseWorkedDays(findStatValue(WORKED_DAYS_LABEL));
-    if (totalMinutes === null || workedDays === null) return;
+    const requiredMinutes = findRequiredMinutesToDate();
+    if (totalMinutes === null || requiredMinutes === null) return;
 
-    const balanceMinutes = totalMinutes - (workedDays * EXPECTED_MINUTES_PER_WORKED_DAY);
+    const clockState = isViewingCurrentMonth()
+      ? findClockState()
+      : { isActive: false, timerSeconds: null };
+    const liveTimerSeconds = clockState.timerSeconds;
+    if (liveTimerSeconds === null) {
+      liveAnchor = null;
+    } else if (
+      !liveAnchor ||
+      liveAnchor.totalMinutes !== totalMinutes ||
+      liveTimerSeconds < liveAnchor.timerSeconds
+    ) {
+      liveAnchor = { totalMinutes, timerSeconds: liveTimerSeconds };
+    }
+
+    const liveDeltaSeconds = liveAnchor ? liveTimerSeconds - liveAnchor.timerSeconds : 0;
+    const workedSeconds = (totalMinutes * 60) + liveDeltaSeconds;
+    const remainingSeconds = Math.max(0, (requiredMinutes * 60) - workedSeconds);
     const card = ensureBalanceCard(totalCard);
     if (!card) return;
 
     const valueElement = card.querySelector(`#${VALUE_ID}`);
-    if (!valueElement) return;
+    const labelElement = card.querySelector(`#${LABEL_ID}`);
+    if (!valueElement || !labelElement) return;
 
-    const nextValue = formatSignedDuration(balanceMinutes);
+    const nextLabel = clockState.isActive ? ACTIVE_LABEL_TEXT : INACTIVE_LABEL_TEXT;
+    const nextValue = clockState.isActive
+      ? remainingSeconds === 0
+        ? 'Now'
+        : formatClockTime(Date.now() + (remainingSeconds * 1000))
+      : formatRemainingDuration(remainingSeconds);
+    if (normalizeText(labelElement.textContent) !== nextLabel) {
+      labelElement.textContent = nextLabel;
+    }
     if (normalizeText(valueElement.textContent) !== nextValue) {
       valueElement.textContent = nextValue;
     }
 
-    setBalanceColor(valueElement, balanceMinutes);
+    setValueColor(valueElement, clockState.isActive, remainingSeconds);
   }
 
   function scheduleUpdate() {
@@ -180,7 +285,7 @@
       characterData: true
     });
 
-    window.setInterval(scheduleUpdate, 5000);
+    window.setInterval(scheduleUpdate, LIVE_UPDATE_INTERVAL_MS);
   }
 
   if (document.body) {
